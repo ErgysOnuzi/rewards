@@ -6,6 +6,8 @@ import { Loader2, Trophy, X, RotateCw } from "lucide-react";
 export interface SpinResult {
   result: "WIN" | "LOSE";
   prizeLabel?: string;
+  ticketsTotal: number;
+  ticketsUsedAfter: number;
   ticketsRemainingAfter: number;
 }
 
@@ -13,11 +15,12 @@ interface SpinWheelProps {
   ticketsRemaining: number;
   onSpin: () => Promise<SpinResult>;
   onSpinComplete?: (result: SpinResult) => void;
+  onSpinError?: (error: Error) => void;
 }
 
 type SpinState = "idle" | "spinning" | "result";
 
-export default function SpinWheel({ ticketsRemaining, onSpin, onSpinComplete }: SpinWheelProps) {
+export default function SpinWheel({ ticketsRemaining, onSpin, onSpinComplete, onSpinError }: SpinWheelProps) {
   const [spinState, setSpinState] = useState<SpinState>("idle");
   const [lastResult, setLastResult] = useState<SpinResult | null>(null);
   const [rotation, setRotation] = useState(0);
@@ -40,7 +43,8 @@ export default function SpinWheel({ ticketsRemaining, onSpin, onSpinComplete }: 
       }, 2500);
     } catch (error) {
       setSpinState("idle");
-      console.error("Spin failed:", error);
+      const err = error instanceof Error ? error : new Error("Spin failed");
+      onSpinError?.(err);
     }
   };
 

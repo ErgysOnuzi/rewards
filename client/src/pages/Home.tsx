@@ -66,6 +66,8 @@ export default function Home() {
     return {
       result: data.result,
       prizeLabel: data.prize_label || undefined,
+      ticketsTotal: data.tickets_total,
+      ticketsUsedAfter: data.tickets_used_after,
       ticketsRemainingAfter: data.tickets_remaining_after,
     };
   };
@@ -74,7 +76,8 @@ export default function Home() {
     if (ticketData) {
       setTicketData({
         ...ticketData,
-        ticketsUsed: ticketData.ticketsUsed + 1,
+        ticketsTotal: result.ticketsTotal,
+        ticketsUsed: result.ticketsUsedAfter,
         ticketsRemaining: result.ticketsRemainingAfter,
       });
     }
@@ -85,6 +88,14 @@ export default function Home() {
         description: `You won: ${result.prizeLabel}`,
       });
     }
+  };
+
+  const handleSpinError = (error: Error) => {
+    toast({
+      title: "Spin Failed",
+      description: error.message,
+      variant: "destructive",
+    });
   };
 
   return (
@@ -107,6 +118,7 @@ export default function Home() {
                 ticketsRemaining={ticketData.ticketsRemaining}
                 onSpin={handleSpin}
                 onSpinComplete={handleSpinComplete}
+                onSpinError={handleSpinError}
               />
             </div>
           )}

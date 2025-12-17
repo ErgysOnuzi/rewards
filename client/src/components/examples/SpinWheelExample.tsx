@@ -13,6 +13,8 @@ export default function SpinWheelExample() {
     return {
       result: isWin ? "WIN" : "LOSE",
       prizeLabel: isWin ? "$5 Stake Tip" : undefined,
+      ticketsTotal: 5,
+      ticketsUsedAfter: 5 - newTickets,
       ticketsRemainingAfter: newTickets,
     };
   };
@@ -22,11 +24,16 @@ export default function SpinWheelExample() {
     console.log("Spin complete:", result);
   };
 
+  const handleError = (error: Error) => {
+    console.error("Spin error:", error);
+  };
+
   return (
     <SpinWheel
       ticketsRemaining={tickets}
       onSpin={handleSpin}
       onSpinComplete={handleComplete}
+      onSpinError={handleError}
     />
   );
 }
