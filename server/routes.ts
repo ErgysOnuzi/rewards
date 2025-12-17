@@ -9,6 +9,18 @@ import { isRateLimited } from "./lib/rateLimit";
 import { config, validateConfig } from "./lib/config";
 import { ZodError } from "zod";
 
+// Demo mode data when Google Sheets isn't configured
+const DEMO_USERS: Record<string, { wageredAmount: number; periodLabel: string }> = {
+  ergys: { wageredAmount: 10000, periodLabel: "December 2024" },
+  demo: { wageredAmount: 5000, periodLabel: "December 2024" },
+};
+const demoSpinCounts: Record<string, number> = {};
+
+function isDemoMode(): boolean {
+  const errors = validateConfig();
+  return errors.length > 0;
+}
+
 function getClientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string") {
@@ -25,7 +37,28 @@ export async function registerRoutes(
   app.post("/api/lookup", async (req: Request, res: Response) => {
     try {
       const parsed = lookupRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id;
+      const stakeId = parsed.stake_id.toLowerCase();
+
+      // Demo mode when Google Sheets isn't configured
+      if (isDemoMode()) {
+        const demoUser = DEMO_USERS[stakeId];
+        if (!demoUser) {
+          return res.status(404).json({ message: "Stake ID not found. Try 'ergys' or 'demo'." } as ErrorResponse);
+        }
+        const ticketsTotal = calculateTickets(demoUser.wageredAmount);
+        const ticketsUsed = demoSpinCounts[stakeId] || 0;
+        const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
+
+        const response: LookupResponse = {
+          stake_id: stakeId,
+          period_label: demoUser.periodLabel,
+          wagered_amount: demoUser.wageredAmount,
+          tickets_total: ticketsTotal,
+          tickets_used: ticketsUsed,
+          tickets_remaining: ticketsRemaining,
+        };
+        return res.json(response);
+      }
 
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
@@ -65,7 +98,43 @@ export async function registerRoutes(
       }
 
       const parsed = spinRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id;
+      const stakeId = parsed.stake_id.toLowerCase();
+
+      // Demo mode when Google Sheets isn't configured
+      if (isDemoMode()) {
+        const demoUser = DEMO_USERS[stakeId];
+        if (!demoUser) {
+          return res.status(404).json({ message: "Stake ID not found. Try 'ergys' or 'demo'." } as ErrorResponse);
+        }
+
+        const ticketsTotal = calculateTickets(demoUser.wageredAmount);
+        const ticketsUsedBefore = demoSpinCounts[stakeId] || 0;
+        const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
+
+        if (ticketsRemaining <= 0) {
+          return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
+        }
+
+        const result = determineSpinResult();
+        const prizeLabel = result === "WIN" ? config.prizeLabel : "";
+        const ticketsUsedAfter = ticketsUsedBefore + 1;
+        const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
+
+        // Update demo spin count
+        demoSpinCounts[stakeId] = ticketsUsedAfter;
+
+        const response: SpinResponse = {
+          stake_id: stakeId,
+          wagered_amount: demoUser.wageredAmount,
+          tickets_total: ticketsTotal,
+          tickets_used_before: ticketsUsedBefore,
+          tickets_used_after: ticketsUsedAfter,
+          tickets_remaining_after: ticketsRemainingAfter,
+          result,
+          prize_label: prizeLabel,
+        };
+        return res.json(response);
+      }
 
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
