@@ -1,0 +1,303 @@
+Create a brand-new, separate website project on Replit named lukerewards-spins. This is a ticket-based spin system tied to Stake wagered amount. Implement it end-to-end (frontend + backend + Google Sheets integration). Follow every requirement exactly.
+
+⸻
+
+0) High-level purpose
+
+Users enter their Stake ID (username). The site pulls their wagered amount from a Google Sheet and converts it to tickets using:
+	•	tickets_total = floor(wagered_amount_usd / 1000)
+	•	Each spin costs 1 ticket
+	•	No cooldowns (no 24h / week / month limits). Only ticket balance limits spins.
+	•	Results are only: WIN or LOSE
+	•	Winning odds are extremely slim (house advantage), configurable.
+
+All spins are logged to a separate sheet, and tickets used are computed from logs (not stored manually).
+
+This site is separate from lukerewards.com.
+
+⸻
+
+1) Tech stack (use this)
+	•	Next.js 14+ App Router (TypeScript)
+	•	Tailwind CSS
+	•	Google Sheets API via service account
+	•	Server-side API routes:
+	•	/api/lookup
+	•	/api/spin
+	•	No external UI libraries required (optional shadcn ok, but keep minimal).
+
+⸻
+
+2) Google Sheets structure (must be exact)
+
+Use ONE spreadsheet with TWO tabs (preferred) or two spreadsheets. Implement assuming ONE spreadsheet with two tabs.
+
+Tab A: WAGER_DATA (read-only for app)
+
+Header row required. Columns must be:
+	•	stake_id (string, unique key)
+	•	wagered_amount (number, USD)
+	•	period_label (string, optional, example: “Dec 2025”, “Week 50 2025”)
+	•	updated_at (string optional)
+
+Rules:
+	•	stake_id is the exact Stake username/id users type.
+	•	wagered_amount is the wagered amount for the chosen period (not lifetime).
+	•	App must match by exact stake_id (case-insensitive match allowed, normalize to lowercase in code but keep original for display).
+
+Tab B: SPIN_LOG (append-only)
+
+Header row required. Columns must be:
+	•	timestamp_iso
+	•	stake_id
+	•	wagered_amount
+	•	tickets_total
+	•	tickets_used_before
+	•	tickets_used_after
+	•	tickets_remaining_after
+	•	result (WIN/LOSE)
+	•	win_probability
+	•	prize_label (empty when LOSE)
+	•	request_id (uuid)
+	•	ip_hash
+	•	user_agent
+
+Rules:
+	•	Never edit old rows; only append.
+	•	tickets_used is computed by counting rows for stake_id in SPIN_LOG.
+
+⸻
+
+3) Environment variables (Replit Secrets)
+
+Add these required env vars and read them in code:
+	•	GOOGLE_SHEETS_ID = Spreadsheet ID
+	•	GOOGLE_SERVICE_ACCOUNT_EMAIL
+	•	GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY (handle newline replacement \n)
+	•	WAGER_SHEET_NAME default WAGER_DATA
+	•	SPIN_LOG_SHEET_NAME default SPIN_LOG
+	•	WIN_PROBABILITY default 0.01 (1% win, 99% lose). Must be configurable.
+	•	PRIZE_LABEL default $5 Stake Tip
+	•	RATE_LIMIT_PER_IP_PER_HOUR default 30
+	•	SITE_NAME default LukeRewards Spins
+
+If any env var missing, show a clear server error with instructions.
+
+⸻
+
+4) Core logic requirements (non-negotiable)
+
+Ticket calculation
+	•	tickets_total = floor(wagered_amount / 1000)
+	•	If wagered_amount is 0 or missing -> tickets_total = 0
+	•	If tickets_total <= 0 -> user is not eligible to spin
+
+Tickets used
+	•	tickets_used = countRows(SPIN_LOG where stake_id matches)
+	•	tickets_used must be computed server-side on every request
+
+Tickets remaining
+	•	tickets_remaining = tickets_total - tickets_used
+	•	Block spin if tickets_remaining <= 0
+
+Spin result odds (house advantage)
+	•	Use server-side RNG:
+	•	Math.random() < WIN_PROBABILITY => WIN else LOSE
+	•	Default win prob 1% or lower
+	•	Return the win probability used in the response and store it in SPIN_LOG
+
+Ownership verification
+	•	Do NOT verify stake ownership
+	•	The payout is assumed to be sent to that Stake ID outside the app
+	•	App only logs that the user “won” and what prize label is owed
+
+⸻
+
+5) Anti-abuse (must implement)
+
+Rate limiting
+
+Implement rate limit in-memory (acceptable for MVP):
+	•	Per-IP limit: RATE_LIMIT_PER_IP_PER_HOUR
+	•	Count requests to /api/spin only
+	•	If exceeded: return 429 with message “Too many spin attempts. Try again later.”
+
+IP hashing
+	•	Hash IP using SHA-256 with a static salt from env or hardcoded “lukerewards-spins”
+	•	Store only the hash in the log, never raw IP
+
+Request id
+	•	Generate UUID per spin attempt
+	•	Log it for audit
+
+⸻
+
+6) API endpoints (implement exactly)
+
+POST /api/lookup
+
+Request JSON:
+
+{ "stake_id": "jackboy" }
+
+Server behavior:
+	1.	Validate stake_id (required, 2-32 chars, only letters/numbers/_ allowed; trim spaces)
+	2.	Read WAGER_DATA and find stake_id (case-insensitive)
+	3.	Read SPIN_LOG and count used tickets for that stake_id
+	4.	Compute tickets_total and tickets_remaining
+	5.	Return JSON:
+
+Response JSON:
+
+{
+  "stake_id": "jackboy",
+  "period_label": "Dec 2025",
+  "wagered_amount": 52340,
+  "tickets_total": 52,
+  "tickets_used": 3,
+  "tickets_remaining": 49
+}
+
+If not found:
+	•	return 404 with message “Stake ID not found in wager sheet.”
+
+POST /api/spin
+
+Request JSON:
+
+{ "stake_id": "jackboy" }
+
+Server behavior:
+	1.	Apply rate limiting by IP
+	2.	Validate stake_id
+	3.	Lookup wagered_amount from WAGER_DATA
+	4.	Compute tickets_total
+	5.	Count tickets_used from SPIN_LOG
+	6.	If tickets_remaining <= 0 -> return 403 with message “No tickets remaining.”
+	7.	Decide WIN/LOSE using WIN_PROBABILITY
+	8.	Append a new row into SPIN_LOG with all required fields
+	9.	Return JSON:
+
+Response JSON:
+
+{
+  "stake_id": "jackboy",
+  "wagered_amount": 52340,
+  "tickets_total": 52,
+  "tickets_used_before": 3,
+  "tickets_used_after": 4,
+  "tickets_remaining_after": 48,
+  "result": "LOSE",
+  "prize_label": ""
+}
+
+If WIN, prize_label must be PRIZE_LABEL.
+
+Important: Result must be decided server-side BEFORE the frontend animation resolves. Frontend can animate for 2-3 seconds then reveal the server result.
+
+⸻
+
+7) Frontend pages (must build)
+
+/ Home page (single-page app is fine)
+
+Sections:
+	1.	Hero
+
+	•	Title: “LukeRewards Spins”
+	•	Subtitle: “Every $1,000 wagered = 1 ticket. Each spin costs 1 ticket.”
+	•	Small note: “Odds favor the house.”
+
+	2.	Stake ID input card
+
+	•	Input: Stake ID
+	•	Button: “Check Tickets”
+	•	On success: show a status panel with:
+	•	Wagered amount
+	•	Tickets total
+	•	Tickets used
+	•	Tickets remaining
+	•	Period label (if present)
+
+	3.	Spin panel
+
+	•	Button: “Spin 1 Ticket”
+	•	Disabled unless tickets_remaining > 0
+	•	When clicked:
+	•	Call /api/spin
+	•	Show wheel/spinner animation for ~2 seconds
+	•	Reveal result:
+	•	LOSE: “No win. Spin again if you have tickets.”
+	•	WIN: “You won: $5 Stake Tip” (or PRIZE_LABEL)
+	•	After spin, auto-refresh status by calling /api/lookup
+
+	4.	Footer
+
+	•	Disclaimer text:
+	•	“This site reads wager data from internal spreadsheets and may update twice daily.”
+	•	“Prizes are paid to the Stake ID entered.”
+
+UI theme:
+	•	Dark, clean, premium
+	•	Stake-like accents (green CTA)
+	•	No clutter
+
+⸻
+
+8) Google Sheets integration details (must implement)
+
+Use official googleapis library or direct JWT auth.
+
+Implementation requirements:
+	•	Create helper lib/sheets.ts:
+	•	getWagerRow(stakeId)
+	•	countSpinsForStakeId(stakeId)
+	•	appendSpinLogRow(rowData)
+
+Read ranges:
+	•	WAGER_DATA: fetch all rows once per request (acceptable MVP) or implement simple caching for 30s
+	•	SPIN_LOG: count by scanning rows (acceptable MVP) with optimization/caching if needed
+
+Case-insensitive match:
+	•	normalize stake_id to lowercase for comparisons
+	•	keep original stake_id for display/log as the user entered (but also store normalized in memory as needed)
+
+⸻
+
+9) Code structure (create these files)
+	•	app/page.tsx (UI + client logic)
+	•	app/api/lookup/route.ts
+	•	app/api/spin/route.ts
+	•	lib/validate.ts (stake_id validation)
+	•	lib/rateLimit.ts (in-memory limiter)
+	•	lib/hash.ts (sha256 helpers)
+	•	lib/sheets.ts (Google Sheets read/append)
+	•	README.md (setup + sheet column requirements + env vars)
+
+⸻
+
+10) Acceptance tests (must pass)
+	•	Stake ID not found -> clean 404 + UI message
+	•	Stake ID found with wager < 1000 -> tickets_total 0, spin disabled
+	•	Stake ID found with wager 2000 -> tickets_total 2
+	•	Spinning twice consumes 2 tickets and blocks the 3rd spin
+	•	Odds are slim: WIN rarely happens
+	•	Logs append correctly with accurate before/after counts
+	•	No cooldown logic exists anywhere
+	•	Rate limit blocks repeated spin spam
+
+⸻
+
+11) Do not do
+	•	No account system
+	•	No cooldown timers
+	•	No claiming prizes
+	•	No extra databases
+	•	No Stripe
+	•	No Discord integration in this phase
+
+⸻
+
+12) Final output
+
+Deliver a fully working Replit project that runs successfully, with clear README instructions, using Google Sheets as described, implementing the pure ticket model with slim win odds and house advantage.
