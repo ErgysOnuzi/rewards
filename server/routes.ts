@@ -16,6 +16,14 @@ const DEMO_USERS: Record<string, { wageredAmount: number; periodLabel: string }>
   luke: { wageredAmount: 20000, periodLabel: "December 2024" },
 };
 const demoSpinCounts: Record<string, number> = {};
+const demoSpinLogs: Array<{
+  timestamp: string;
+  stakeId: string;
+  wageredAmount: number;
+  spinNumber: number;
+  result: "WIN" | "LOSE";
+  prizeLabel: string;
+}> = [];
 
 // Special win conditions for demo mode (spin number -> guaranteed win)
 const GUARANTEED_WIN_SPINS: Record<string, number[]> = {
@@ -131,8 +139,16 @@ export async function registerRoutes(
         const ticketsUsedAfter = ticketsUsedBefore + 1;
         const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
-        // Update demo spin count
+        // Update demo spin count and log
         demoSpinCounts[stakeId] = ticketsUsedAfter;
+        demoSpinLogs.unshift({
+          timestamp: new Date().toISOString(),
+          stakeId,
+          wageredAmount: demoUser.wageredAmount,
+          spinNumber,
+          result,
+          prizeLabel,
+        });
 
         const response: SpinResponse = {
           stake_id: stakeId,
@@ -202,6 +218,26 @@ export async function registerRoutes(
       console.error("Spin error:", err);
       return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
     }
+  });
+
+  app.get("/api/admin/logs", (_req: Request, res: Response) => {
+    // In demo mode, return in-memory logs
+    if (isDemoMode()) {
+      return res.json({
+        mode: "demo",
+        logs: demoSpinLogs.slice(0, 100),
+        totalSpins: demoSpinLogs.length,
+        totalWins: demoSpinLogs.filter(l => l.result === "WIN").length,
+      });
+    }
+    // When Google Sheets is configured, logs are in the spreadsheet
+    return res.json({
+      mode: "sheets",
+      message: "View spin logs in your Google Sheets SPIN_LOG tab.",
+      logs: [],
+      totalSpins: 0,
+      totalWins: 0,
+    });
   });
 
   app.get("/api/config", (_req: Request, res: Response) => {
