@@ -13,8 +13,14 @@ import { ZodError } from "zod";
 const DEMO_USERS: Record<string, { wageredAmount: number; periodLabel: string }> = {
   ergys: { wageredAmount: 10000, periodLabel: "December 2024" },
   demo: { wageredAmount: 5000, periodLabel: "December 2024" },
+  luke: { wageredAmount: 20000, periodLabel: "December 2024" },
 };
 const demoSpinCounts: Record<string, number> = {};
+
+// Special win conditions for demo mode (spin number -> guaranteed win)
+const GUARANTEED_WIN_SPINS: Record<string, number[]> = {
+  luke: [13], // Luke wins on 13th spin
+};
 
 function isDemoMode(): boolean {
   const errors = validateConfig();
@@ -115,7 +121,12 @@ export async function registerRoutes(
           return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
         }
 
-        const result = determineSpinResult();
+        // Check for guaranteed win (spin number is ticketsUsedBefore + 1)
+        const spinNumber = ticketsUsedBefore + 1;
+        const guaranteedWins = GUARANTEED_WIN_SPINS[stakeId] || [];
+        const isGuaranteedWin = guaranteedWins.includes(spinNumber);
+        
+        const result = isGuaranteedWin ? "WIN" : determineSpinResult();
         const prizeLabel = result === "WIN" ? config.prizeLabel : "";
         const ticketsUsedAfter = ticketsUsedBefore + 1;
         const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
