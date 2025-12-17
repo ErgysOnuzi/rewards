@@ -31,8 +31,10 @@ export function isRateLimited(ipHash: string): boolean {
 
 export function cleanupExpiredEntries(): void {
   const now = Date.now();
-  for (const [key, entry] of rateLimitStore.entries()) {
-    if (now > entry.resetAt) {
+  const keys = Array.from(rateLimitStore.keys());
+  for (const key of keys) {
+    const entry = rateLimitStore.get(key);
+    if (entry && now > entry.resetAt) {
       rateLimitStore.delete(key);
     }
   }
