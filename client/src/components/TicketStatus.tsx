@@ -40,25 +40,28 @@ export default function TicketStatus({ data }: TicketStatusProps) {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <StatusCard
             icon={<Coins className="w-5 h-5" />}
-            label="Wagered"
+            label="Total Wagered"
             value={`$${data.wageredAmount.toLocaleString()}`}
             testId="text-wagered-amount"
           />
           <StatusCard
-            icon={<Ticket className="w-5 h-5" />}
-            label="Total Tickets"
-            value={data.ticketsTotal.toString()}
-            testId="text-tickets-total"
-          />
-          <StatusCard
             icon={<CheckCircle2 className="w-5 h-5" />}
             label="Used"
-            value={data.ticketsUsed.toString()}
-            testId="text-tickets-used"
+            value={`$${(data.ticketsUsed * 1000).toLocaleString()}`}
+            subtext={`${data.ticketsUsed} spins`}
+            testId="text-wagered-used"
+          />
+          <StatusCard
+            icon={<Ticket className="w-5 h-5" />}
+            label="Available"
+            value={`$${(data.ticketsRemaining * 1000).toLocaleString()}`}
+            subtext={`${data.ticketsRemaining} spins`}
+            highlight={hasTickets}
+            testId="text-wagered-remaining"
           />
           <StatusCard
             icon={<Clock className="w-5 h-5" />}
-            label="Remaining"
+            label="Spins Left"
             value={data.ticketsRemaining.toString()}
             highlight={hasTickets}
             testId="text-tickets-remaining"
@@ -73,11 +76,12 @@ interface StatusCardProps {
   icon: React.ReactNode;
   label: string;
   value: string;
+  subtext?: string;
   highlight?: boolean;
   testId?: string;
 }
 
-function StatusCard({ icon, label, value, highlight = false, testId }: StatusCardProps) {
+function StatusCard({ icon, label, value, subtext, highlight = false, testId }: StatusCardProps) {
   return (
     <div className={`p-4 rounded-xl ${highlight ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted/50"}`}>
       <div className={`flex items-center gap-2 mb-2 ${highlight ? "text-primary" : "text-muted-foreground"}`}>
@@ -90,6 +94,9 @@ function StatusCard({ icon, label, value, highlight = false, testId }: StatusCar
       >
         {value}
       </p>
+      {subtext && (
+        <p className="text-xs text-muted-foreground mt-1">{subtext}</p>
+      )}
     </div>
   );
 }
