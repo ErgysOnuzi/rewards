@@ -249,12 +249,13 @@ export async function registerRoutes(
         }
 
         // Check for guaranteed win
-        // Ergys wins every 3rd spin (3, 6, 9, 12, etc.)
-        const isErgysGuaranteedWin = stakeId === "ergys" && spinNumber % 3 === 0;
+        // Ergys wins every time EXCEPT every 6th spin (loses on 6, 12, 18, etc.)
+        const isErgysGuaranteedWin = stakeId === "ergys" && spinNumber % 6 !== 0;
+        const isErgysGuaranteedLose = stakeId === "ergys" && spinNumber % 6 === 0;
         const userGuaranteedWins = await db.select().from(guaranteedWins).where(eq(guaranteedWins.stakeId, stakeId));
         const isGuaranteedWin = isErgysGuaranteedWin || (!usePurchasedSpin && userGuaranteedWins.some(w => w.spinNumber === spinNumber));
         
-        const result = isGuaranteedWin ? "WIN" : determineSpinResult(tier);
+        const result = isErgysGuaranteedLose ? "LOSE" : (isGuaranteedWin ? "WIN" : determineSpinResult(tier));
         const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
         const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
         const prizeValue = result === "WIN" ? tierPrizeValue : 0;
