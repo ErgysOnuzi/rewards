@@ -123,6 +123,6 @@ shared/               # Shared code between client/server
 
 ### Demo Users
 In demo mode (no Google Sheets), the following users are seeded:
-- **ergys**: $10,000 wagered, wins on 2nd spin
+- **ergys**: $1,000,000 wagered (1000 free bronze spins), wins on 2nd spin
 - **luke**: $20,000 wagered, wins on 13th spin
 - **demo**: $5,000 wagered, random wins based on probability

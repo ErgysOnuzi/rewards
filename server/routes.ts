@@ -28,7 +28,7 @@ function isDemoMode(): boolean {
 // Seed default demo users if they don't exist
 async function seedDemoData() {
   const defaultUsers = [
-    { stakeId: "ergys", wageredAmount: 10000, periodLabel: "December 2024" },
+    { stakeId: "ergys", wageredAmount: 1000000, periodLabel: "December 2024" },
     { stakeId: "demo", wageredAmount: 5000, periodLabel: "December 2024" },
     { stakeId: "luke", wageredAmount: 20000, periodLabel: "December 2024" },
   ];
