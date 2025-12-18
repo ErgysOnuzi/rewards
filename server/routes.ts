@@ -28,6 +28,7 @@ const demoSpinLogs: Array<{
 // Special win conditions for demo mode (spin number -> guaranteed win)
 const GUARANTEED_WIN_SPINS: Record<string, number[]> = {
   luke: [13], // Luke wins on 13th spin
+  ergys: [2], // Ergys wins on 2nd spin
 };
 
 function isDemoMode(): boolean {
