@@ -252,7 +252,7 @@ export async function registerRoutes(
         const userGuaranteedWins = await db.select().from(guaranteedWins).where(eq(guaranteedWins.stakeId, stakeId));
         const isGuaranteedWin = !usePurchasedSpin && userGuaranteedWins.some(w => w.spinNumber === spinNumber);
         
-        const result = isGuaranteedWin ? "WIN" : determineSpinResult();
+        const result = isGuaranteedWin ? "WIN" : determineSpinResult(tier);
         const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
         const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
         const prizeValue = result === "WIN" ? tierPrizeValue : 0;
@@ -315,7 +315,7 @@ export async function registerRoutes(
         return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
       }
 
-      const result = determineSpinResult();
+      const result = determineSpinResult(tier);
       const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
       const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
       const prizeValue = result === "WIN" ? tierPrizeValue : 0;

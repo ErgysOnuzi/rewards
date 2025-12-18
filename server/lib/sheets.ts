@@ -107,6 +107,9 @@ export function calculateTickets(wageredAmount: number): number {
   return Math.floor(wageredAmount / 1000);
 }
 
-export function determineSpinResult(): "WIN" | "LOSE" {
-  return Math.random() < config.winProbability ? "WIN" : "LOSE";
+import { TIER_CONFIG, type SpinTier } from "@shared/schema";
+
+export function determineSpinResult(tier: SpinTier = "bronze"): "WIN" | "LOSE" {
+  const winProbability = TIER_CONFIG[tier].winProbability;
+  return Math.random() < winProbability ? "WIN" : "LOSE";
 }

@@ -12,14 +12,17 @@ Preferred communication style: Simple, everyday language.
 
 ## Tiered Spin System
 
-### Spin Tiers
-- **Bronze**: Base tier, wins $5 per spin, costs $5 to purchase
-- **Silver**: Mid tier, wins $25 per spin, costs $25 to purchase
-- **Gold**: Premium tier, wins $100 per spin, costs $100 to purchase
+### Spin Tiers (Balanced for House Edge)
+Math: $100k wagered = 100 bronze = 50 silver = 10 gold
+Expected payout is equal across all tiers (house never loses on tier upgrades)
+
+- **Bronze**: $5 prize, 1% win rate, costs $5 to purchase
+- **Silver**: $25 prize, 0.4% win rate, costs $25 to purchase  
+- **Gold**: $100 prize, 0.5% win rate, costs $100 to purchase
 
 ### Tier Conversion Rates
-- 5 Bronze spins = 1 Silver spin
-- 10 Silver spins = 1 Gold spin
+- 2 Bronze spins = 1 Silver spin
+- 5 Silver spins = 1 Gold spin
 
 ### Spin Sources
 1. **Free Tickets**: Earned from wagering ($1,000 wagered = 1 free bronze spin)

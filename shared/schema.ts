@@ -5,17 +5,23 @@ import { createInsertSchema } from "drizzle-zod";
 // Spin tier types
 export type SpinTier = "bronze" | "silver" | "gold";
 
-// Tier configuration (prize values and costs)
+// Tier configuration (prize values, costs, and win probability)
+// Math: $100k wagered = 100 bronze = 50 silver = 10 gold
+// Expected payout is equal across tiers (house never loses on tier upgrades)
+// 100 bronze × 1% × $5 = $5
+// 50 silver × 0.4% × $25 = $5
+// 10 gold × 0.5% × $100 = $5
 export const TIER_CONFIG = {
-  bronze: { prizeValue: 5, cost: 5 },
-  silver: { prizeValue: 25, cost: 25 },
-  gold: { prizeValue: 100, cost: 100 },
+  bronze: { prizeValue: 5, cost: 5, winProbability: 0.01 },      // 1% win rate
+  silver: { prizeValue: 25, cost: 25, winProbability: 0.004 },   // 0.4% win rate
+  gold: { prizeValue: 100, cost: 100, winProbability: 0.005 },   // 0.5% win rate
 } as const;
 
-// Conversion rates: 5 bronze = 1 silver, 10 silver = 1 gold
+// Conversion rates: 2 bronze = 1 silver, 5 silver = 1 gold
+// This gives: 100 bronze = 50 silver = 10 gold
 export const CONVERSION_RATES = {
-  bronze_to_silver: 5,
-  silver_to_gold: 10,
+  bronze_to_silver: 2,
+  silver_to_gold: 5,
 } as const;
 
 // Database tables
