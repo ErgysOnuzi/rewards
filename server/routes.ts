@@ -1,40 +1,52 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
 import { randomUUID } from "crypto";
-import { lookupRequestSchema, spinRequestSchema } from "@shared/schema";
+import { lookupRequestSchema, spinRequestSchema, demoUsers, spinLogs, guaranteedWins } from "@shared/schema";
 import type { LookupResponse, SpinResponse, ErrorResponse, SpinLogRow } from "@shared/schema";
 import { getWagerRow, countSpinsForStakeId, appendSpinLogRow, calculateTickets, determineSpinResult } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited } from "./lib/rateLimit";
 import { config, validateConfig } from "./lib/config";
 import { ZodError } from "zod";
-
-// Demo mode data when Google Sheets isn't configured
-const DEMO_USERS: Record<string, { wageredAmount: number; periodLabel: string }> = {
-  ergys: { wageredAmount: 10000, periodLabel: "December 2024" },
-  demo: { wageredAmount: 5000, periodLabel: "December 2024" },
-  luke: { wageredAmount: 20000, periodLabel: "December 2024" },
-};
-const demoSpinCounts: Record<string, number> = {};
-const demoSpinLogs: Array<{
-  timestamp: string;
-  stakeId: string;
-  wageredAmount: number;
-  spinNumber: number;
-  result: "WIN" | "LOSE";
-  prizeLabel: string;
-}> = [];
-
-// Special win conditions for demo mode (spin number -> guaranteed win)
-const GUARANTEED_WIN_SPINS: Record<string, number[]> = {
-  luke: [13], // Luke wins on 13th spin
-  ergys: [2], // Ergys wins on 2nd spin
-};
+import { db } from "./db";
+import { eq, desc, sql } from "drizzle-orm";
 
 function isDemoMode(): boolean {
   const errors = validateConfig();
   return errors.length > 0;
 }
+
+// Seed default demo users if they don't exist
+async function seedDemoData() {
+  const defaultUsers = [
+    { stakeId: "ergys", wageredAmount: 10000, periodLabel: "December 2024" },
+    { stakeId: "demo", wageredAmount: 5000, periodLabel: "December 2024" },
+    { stakeId: "luke", wageredAmount: 20000, periodLabel: "December 2024" },
+  ];
+  
+  const defaultWins = [
+    { stakeId: "luke", spinNumber: 13 },
+    { stakeId: "ergys", spinNumber: 2 },
+  ];
+
+  for (const user of defaultUsers) {
+    const existing = await db.select().from(demoUsers).where(eq(demoUsers.stakeId, user.stakeId));
+    if (existing.length === 0) {
+      await db.insert(demoUsers).values(user);
+    }
+  }
+
+  for (const win of defaultWins) {
+    const existing = await db.select().from(guaranteedWins)
+      .where(eq(guaranteedWins.stakeId, win.stakeId));
+    if (!existing.some(w => w.spinNumber === win.spinNumber)) {
+      await db.insert(guaranteedWins).values(win);
+    }
+  }
+}
+
+// Initialize on startup
+seedDemoData().catch(console.error);
 
 function getClientIp(req: Request): string {
   const forwarded = req.headers["x-forwarded-for"];
@@ -56,12 +68,13 @@ export async function registerRoutes(
 
       // Demo mode when Google Sheets isn't configured
       if (isDemoMode()) {
-        const demoUser = DEMO_USERS[stakeId];
+        const [demoUser] = await db.select().from(demoUsers).where(eq(demoUsers.stakeId, stakeId));
         if (!demoUser) {
-          return res.status(404).json({ message: "Stake ID not found. Try 'ergys' or 'demo'." } as ErrorResponse);
+          return res.status(404).json({ message: "Stake ID not found. Try 'ergys', 'demo', or 'luke'." } as ErrorResponse);
         }
         const ticketsTotal = calculateTickets(demoUser.wageredAmount);
-        const ticketsUsed = demoSpinCounts[stakeId] || 0;
+        const spinCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
+        const ticketsUsed = Number(spinCount[0]?.count || 0);
         const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
 
         const response: LookupResponse = {
@@ -117,13 +130,14 @@ export async function registerRoutes(
 
       // Demo mode when Google Sheets isn't configured
       if (isDemoMode()) {
-        const demoUser = DEMO_USERS[stakeId];
+        const [demoUser] = await db.select().from(demoUsers).where(eq(demoUsers.stakeId, stakeId));
         if (!demoUser) {
-          return res.status(404).json({ message: "Stake ID not found. Try 'ergys' or 'demo'." } as ErrorResponse);
+          return res.status(404).json({ message: "Stake ID not found. Try 'ergys', 'demo', or 'luke'." } as ErrorResponse);
         }
 
         const ticketsTotal = calculateTickets(demoUser.wageredAmount);
-        const ticketsUsedBefore = demoSpinCounts[stakeId] || 0;
+        const spinCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
+        const ticketsUsedBefore = Number(spinCount[0]?.count || 0);
         const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
 
         if (ticketsRemaining <= 0) {
@@ -132,23 +146,22 @@ export async function registerRoutes(
 
         // Check for guaranteed win (spin number is ticketsUsedBefore + 1)
         const spinNumber = ticketsUsedBefore + 1;
-        const guaranteedWins = GUARANTEED_WIN_SPINS[stakeId] || [];
-        const isGuaranteedWin = guaranteedWins.includes(spinNumber);
+        const userGuaranteedWins = await db.select().from(guaranteedWins).where(eq(guaranteedWins.stakeId, stakeId));
+        const isGuaranteedWin = userGuaranteedWins.some(w => w.spinNumber === spinNumber);
         
         const result = isGuaranteedWin ? "WIN" : determineSpinResult();
         const prizeLabel = result === "WIN" ? config.prizeLabel : "";
         const ticketsUsedAfter = ticketsUsedBefore + 1;
         const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
-        // Update demo spin count and log
-        demoSpinCounts[stakeId] = ticketsUsedAfter;
-        demoSpinLogs.unshift({
-          timestamp: new Date().toISOString(),
+        // Log spin to database
+        await db.insert(spinLogs).values({
           stakeId,
           wageredAmount: demoUser.wageredAmount,
           spinNumber,
           result,
           prizeLabel,
+          ipHash,
         });
 
         const response: SpinResponse = {
@@ -221,24 +234,32 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/logs", (_req: Request, res: Response) => {
-    // In demo mode, return in-memory logs
-    if (isDemoMode()) {
+  app.get("/api/admin/logs", async (_req: Request, res: Response) => {
+    try {
+      // Get logs from database (works in both demo and sheets mode)
+      const logs = await db.select().from(spinLogs).orderBy(desc(spinLogs.timestamp)).limit(100);
+      const totalCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs);
+      const winCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.result, "WIN"));
+      
+      const formattedLogs = logs.map(log => ({
+        timestamp: log.timestamp.toISOString(),
+        stakeId: log.stakeId,
+        wageredAmount: log.wageredAmount,
+        spinNumber: log.spinNumber,
+        result: log.result as "WIN" | "LOSE",
+        prizeLabel: log.prizeLabel,
+      }));
+
       return res.json({
-        mode: "demo",
-        logs: demoSpinLogs.slice(0, 100),
-        totalSpins: demoSpinLogs.length,
-        totalWins: demoSpinLogs.filter(l => l.result === "WIN").length,
+        mode: isDemoMode() ? "demo" : "sheets",
+        logs: formattedLogs,
+        totalSpins: Number(totalCount[0]?.count || 0),
+        totalWins: Number(winCount[0]?.count || 0),
       });
+    } catch (err) {
+      console.error("Admin logs error:", err);
+      return res.status(500).json({ message: "Failed to fetch logs" });
     }
-    // When Google Sheets is configured, logs are in the spreadsheet
-    return res.json({
-      mode: "sheets",
-      message: "View spin logs in your Google Sheets SPIN_LOG tab.",
-      logs: [],
-      totalSpins: 0,
-      totalWins: 0,
-    });
   });
 
   app.get("/api/config", (_req: Request, res: Response) => {

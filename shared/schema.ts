@@ -1,4 +1,41 @@
 import { z } from "zod";
+import { pgTable, text, integer, real, timestamp, serial } from "drizzle-orm/pg-core";
+import { createInsertSchema } from "drizzle-zod";
+
+// Database tables
+export const demoUsers = pgTable("demo_users", {
+  id: serial("id").primaryKey(),
+  stakeId: text("stake_id").notNull().unique(),
+  wageredAmount: integer("wagered_amount").notNull(),
+  periodLabel: text("period_label").notNull(),
+});
+
+export const spinLogs = pgTable("spin_logs", {
+  id: serial("id").primaryKey(),
+  timestamp: timestamp("timestamp").defaultNow().notNull(),
+  stakeId: text("stake_id").notNull(),
+  wageredAmount: integer("wagered_amount").notNull(),
+  spinNumber: integer("spin_number").notNull(),
+  result: text("result").notNull(), // "WIN" or "LOSE"
+  prizeLabel: text("prize_label").notNull(),
+  ipHash: text("ip_hash"),
+});
+
+export const guaranteedWins = pgTable("guaranteed_wins", {
+  id: serial("id").primaryKey(),
+  stakeId: text("stake_id").notNull(),
+  spinNumber: integer("spin_number").notNull(),
+});
+
+export const insertDemoUserSchema = createInsertSchema(demoUsers).omit({ id: true });
+export const insertSpinLogSchema = createInsertSchema(spinLogs).omit({ id: true, timestamp: true });
+export const insertGuaranteedWinSchema = createInsertSchema(guaranteedWins).omit({ id: true });
+
+export type DemoUser = typeof demoUsers.$inferSelect;
+export type InsertDemoUser = z.infer<typeof insertDemoUserSchema>;
+export type SpinLog = typeof spinLogs.$inferSelect;
+export type InsertSpinLog = z.infer<typeof insertSpinLogSchema>;
+export type GuaranteedWin = typeof guaranteedWins.$inferSelect;
 
 export const stakeIdSchema = z
   .string()
