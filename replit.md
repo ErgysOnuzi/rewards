@@ -10,6 +10,28 @@ This is a standalone site separate from lukerewards.com, focused on a single-pag
 
 Preferred communication style: Simple, everyday language.
 
+## Tiered Spin System
+
+### Spin Tiers
+- **Bronze**: Base tier, wins $5 per spin, costs $5 to purchase
+- **Silver**: Mid tier, wins $25 per spin, costs $25 to purchase
+- **Gold**: Premium tier, wins $100 per spin, costs $100 to purchase
+
+### Tier Conversion Rates
+- 5 Bronze spins = 1 Silver spin
+- 10 Silver spins = 1 Gold spin
+
+### Spin Sources
+1. **Free Tickets**: Earned from wagering ($1,000 wagered = 1 free bronze spin)
+2. **Purchased Spins**: Can be bought with wallet balance (from winnings)
+3. **Converted Spins**: Trade up lower tier spins for higher tier spins
+
+### Wallet System
+- Users accumulate winnings in a wallet balance
+- Wallet can be used to purchase additional spins
+- Users can request withdrawals to their Stake account
+- Withdrawals require admin approval before processing
+
 ## System Architecture
 
 ### Frontend Architecture
@@ -22,7 +44,14 @@ Preferred communication style: Simple, everyday language.
 
 ### Backend Architecture
 - **Runtime**: Node.js with Express
-- **API Pattern**: REST API with POST endpoints at `/api/lookup` and `/api/spin`
+- **API Pattern**: REST API with endpoints:
+  - `/api/lookup` - Get user ticket/wallet/spin balance info
+  - `/api/spin` - Execute a spin (supports tier parameter)
+  - `/api/spins/convert` - Convert spins between tiers
+  - `/api/spins/purchase` - Buy spins with wallet balance
+  - `/api/wallet/withdraw` - Request withdrawal to Stake account
+  - `/api/admin/logs` - Admin: View spin logs
+  - `/api/admin/withdrawals` - Admin: View/process withdrawals
 - **Validation**: Zod schemas shared between client and server in `shared/schema.ts`
 - **Security Features**:
   - IP-based rate limiting (configurable, default 30 requests/hour)
@@ -30,49 +59,67 @@ Preferred communication style: Simple, everyday language.
   - Request ID tracking for spin audit trail
 
 ### Data Flow
-1. User enters Stake ID → POST `/api/lookup` → Returns ticket balance
-2. User clicks spin → POST `/api/spin` → Determines result, logs to sheet, returns outcome
-3. Ticket calculation: `floor(wagered_amount / 1000)`
-4. Tickets used calculated from spin log count, not stored separately
+1. User enters Stake ID → POST `/api/lookup` → Returns ticket balance, wallet, spin balances
+2. User clicks spin → POST `/api/spin` → Determines result, updates wallet, returns outcome
+3. Free ticket calculation: `floor(wagered_amount / 1000)`
+4. Purchased/converted spins stored in user_spin_balances table
+5. Winnings credited to user_wallets table
+6. Withdrawals tracked in withdrawal_requests table
 
 ### Code Organization
 ```
 client/src/           # React frontend
-  components/         # UI components (HeroSection, SpinWheel, etc.)
+  components/         # UI components (HeroSection, SpinWheel, TicketStatus, etc.)
   components/ui/      # shadcn/ui base components
-  pages/              # Page components (Home, not-found)
+  pages/              # Page components (Home, Admin, not-found)
   hooks/              # Custom React hooks
   lib/                # Utilities (queryClient, utils)
 server/               # Express backend
   lib/                # Server utilities (sheets, config, rateLimit, hash)
   routes.ts           # API route handlers
-  storage.ts          # In-memory storage (users - currently unused)
+  db.ts               # Database connection
+  storage.ts          # In-memory storage (currently unused)
 shared/               # Shared code between client/server
-  schema.ts           # Zod schemas and TypeScript types
+  schema.ts           # Zod schemas, Drizzle tables, and TypeScript types
 ```
+
+## Database Schema
+
+### Tables
+- **demo_users**: Demo user accounts with stake_id, wagered_amount, period_label
+- **spin_logs**: Audit trail of all free ticket spins
+- **guaranteed_wins**: Demo mode: guaranteed wins at specific spin numbers
+- **user_wallets**: User wallet balances (winnings)
+- **user_spin_balances**: Per-tier spin balances for each user
+- **withdrawal_requests**: Pending/processed withdrawal requests
+- **wallet_transactions**: Audit trail of all wallet transactions
 
 ## External Dependencies
 
-### Google Sheets Integration
-- **Purpose**: Primary data store for wager data and spin logs
+### Google Sheets Integration (Optional)
+- **Purpose**: Primary data store for wager data and spin logs (production mode)
 - **Library**: `googleapis` package with Sheets API v4
 - **Authentication**: Service account credentials via environment variables
-- **Sheet Structure**:
-  - Tab `WAGER_DATA`: Read-only source of stake_id, wagered_amount, period_label
-  - Tab `SPIN_LOG`: Append-only log of all spins with full audit trail
+- **Demo Mode**: Works without Google Sheets using PostgreSQL database
 
 ### Required Environment Variables
-- `DATABASE_URL` - PostgreSQL connection (for Drizzle, though sheets are primary store)
+- `DATABASE_URL` - PostgreSQL connection (required for all modes)
+- `SESSION_SECRET` - Session encryption key
+
+### Optional Environment Variables (Google Sheets Mode)
 - `GOOGLE_SHEETS_ID` - The spreadsheet ID to read/write
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Service account email for auth
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - Private key (newlines as `\n`)
 - `WAGER_SHEET_NAME` - Tab name for wager data (default: "WAGER_DATA")
 - `SPIN_LOG_SHEET_NAME` - Tab name for spin logs (default: "SPIN_LOG")
+
+### Configurable Options
 - `WIN_PROBABILITY` - Decimal win chance (default: 0.01 = 1%)
-- `PRIZE_LABEL` - Prize description shown on win (default: "$5 Stake Tip")
+- `PRIZE_VALUE` - Base prize value in dollars (default: 5)
 - `RATE_LIMIT_PER_IP_PER_HOUR` - Request limit per IP (default: 30)
 
-### Database
-- **ORM**: Drizzle ORM configured for PostgreSQL
-- **Current Usage**: Schema exists but Google Sheets is the primary data source
-- **Schema Location**: `shared/schema.ts` contains both Zod schemas and type definitions
+### Demo Users
+In demo mode (no Google Sheets), the following users are seeded:
+- **ergys**: $10,000 wagered, wins on 2nd spin
+- **luke**: $20,000 wagered, wins on 13th spin
+- **demo**: $5,000 wagered, random wins based on probability

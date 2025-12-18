@@ -3,6 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Loader2, Trophy, X, RotateCw } from "lucide-react";
 
+export interface SpinBalances {
+  bronze: number;
+  silver: number;
+  gold: number;
+}
+
 export interface SpinResult {
   result: "WIN" | "LOSE";
   prizeLabel?: string;
@@ -10,6 +16,8 @@ export interface SpinResult {
   ticketsTotal: number;
   ticketsUsedAfter: number;
   ticketsRemainingAfter: number;
+  walletBalance: number;
+  spinBalances: SpinBalances;
 }
 
 interface SpinWheelProps {

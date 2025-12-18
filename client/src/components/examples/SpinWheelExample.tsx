@@ -17,6 +17,8 @@ export default function SpinWheelExample() {
       ticketsTotal: 5,
       ticketsUsedAfter: 5 - newTickets,
       ticketsRemainingAfter: newTickets,
+      walletBalance: isWin ? 5 : 0,
+      spinBalances: { bronze: 0, silver: 0, gold: 0 },
     };
   };
 
