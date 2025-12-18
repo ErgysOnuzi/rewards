@@ -248,9 +248,11 @@ export async function registerRoutes(
           ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
         }
 
-        // Check for guaranteed win (only for bronze free spins)
+        // Check for guaranteed win
+        // Ergys wins every 3rd spin (3, 6, 9, 12, etc.)
+        const isErgysGuaranteedWin = stakeId === "ergys" && spinNumber % 3 === 0;
         const userGuaranteedWins = await db.select().from(guaranteedWins).where(eq(guaranteedWins.stakeId, stakeId));
-        const isGuaranteedWin = !usePurchasedSpin && userGuaranteedWins.some(w => w.spinNumber === spinNumber);
+        const isGuaranteedWin = isErgysGuaranteedWin || (!usePurchasedSpin && userGuaranteedWins.some(w => w.spinNumber === spinNumber));
         
         const result = isGuaranteedWin ? "WIN" : determineSpinResult(tier);
         const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
