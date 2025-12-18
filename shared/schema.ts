@@ -18,6 +18,7 @@ export const spinLogs = pgTable("spin_logs", {
   spinNumber: integer("spin_number").notNull(),
   result: text("result").notNull(), // "WIN" or "LOSE"
   prizeLabel: text("prize_label").notNull(),
+  prizeValue: integer("prize_value").default(0).notNull(), // Dollar amount won
   ipHash: text("ip_hash"),
 });
 
@@ -85,6 +86,7 @@ export interface LookupResponse {
   tickets_total: number;
   tickets_used: number;
   tickets_remaining: number;
+  total_winnings: number;
 }
 
 export interface SpinResponse {
@@ -96,6 +98,7 @@ export interface SpinResponse {
   tickets_remaining_after: number;
   result: "WIN" | "LOSE";
   prize_label: string;
+  prize_value: number;
 }
 
 export interface ErrorResponse {

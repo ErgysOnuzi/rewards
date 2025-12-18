@@ -6,6 +6,7 @@ import { Loader2, Trophy, X, RotateCw } from "lucide-react";
 export interface SpinResult {
   result: "WIN" | "LOSE";
   prizeLabel?: string;
+  prizeValue: number;
   ticketsTotal: number;
   ticketsUsedAfter: number;
   ticketsRemainingAfter: number;

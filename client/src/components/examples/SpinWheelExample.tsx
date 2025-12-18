@@ -13,6 +13,7 @@ export default function SpinWheelExample() {
     return {
       result: isWin ? "WIN" : "LOSE",
       prizeLabel: isWin ? "$5 Stake Tip" : undefined,
+      prizeValue: isWin ? 5 : 0,
       ticketsTotal: 5,
       ticketsUsedAfter: 5 - newTickets,
       ticketsRemainingAfter: newTickets,

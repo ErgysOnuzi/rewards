@@ -1,6 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Ticket, Coins, CheckCircle2, Clock } from "lucide-react";
+import { Ticket, Coins, CheckCircle2, Clock, Trophy } from "lucide-react";
 
 export interface TicketData {
   stakeId: string;
@@ -9,6 +9,7 @@ export interface TicketData {
   ticketsTotal: number;
   ticketsUsed: number;
   ticketsRemaining: number;
+  totalWinnings: number;
 }
 
 interface TicketStatusProps {
@@ -37,7 +38,7 @@ export default function TicketStatus({ data }: TicketStatusProps) {
         </Badge>
       </CardHeader>
       <CardContent>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
           <StatusCard
             icon={<Coins className="w-5 h-5" />}
             label="Total Wagered"
@@ -66,6 +67,14 @@ export default function TicketStatus({ data }: TicketStatusProps) {
             highlight={hasTickets}
             testId="text-tickets-remaining"
           />
+          <StatusCard
+            icon={<Trophy className="w-5 h-5" />}
+            label="Winnings"
+            value={`$${data.totalWinnings.toLocaleString()}`}
+            highlight={data.totalWinnings > 0}
+            isWinnings
+            testId="text-total-winnings"
+          />
         </div>
       </CardContent>
     </Card>
@@ -78,18 +87,31 @@ interface StatusCardProps {
   value: string;
   subtext?: string;
   highlight?: boolean;
+  isWinnings?: boolean;
   testId?: string;
 }
 
-function StatusCard({ icon, label, value, subtext, highlight = false, testId }: StatusCardProps) {
+function StatusCard({ icon, label, value, subtext, highlight = false, isWinnings = false, testId }: StatusCardProps) {
+  const bgClass = isWinnings && highlight 
+    ? "bg-yellow-500/10 ring-1 ring-yellow-500/30" 
+    : highlight 
+      ? "bg-primary/10 ring-1 ring-primary/20" 
+      : "bg-muted/50";
+  
+  const textClass = isWinnings && highlight
+    ? "text-yellow-500"
+    : highlight
+      ? "text-primary"
+      : "text-muted-foreground";
+
   return (
-    <div className={`p-4 rounded-xl ${highlight ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted/50"}`}>
-      <div className={`flex items-center gap-2 mb-2 ${highlight ? "text-primary" : "text-muted-foreground"}`}>
+    <div className={`p-4 rounded-xl ${bgClass}`}>
+      <div className={`flex items-center gap-2 mb-2 ${textClass}`}>
         {icon}
         <span className="text-sm">{label}</span>
       </div>
       <p 
-        className={`text-2xl font-bold font-mono ${highlight ? "text-primary" : ""}`}
+        className={`text-2xl font-bold font-mono ${isWinnings && highlight ? "text-yellow-500" : highlight ? "text-primary" : ""}`}
         data-testid={testId}
       >
         {value}

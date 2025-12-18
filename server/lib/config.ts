@@ -6,6 +6,7 @@ export const config = {
   spinLogSheetName: process.env.SPIN_LOG_SHEET_NAME || "SPIN_LOG",
   winProbability: parseFloat(process.env.WIN_PROBABILITY || "0.01"),
   prizeLabel: process.env.PRIZE_LABEL || "$5 Stake Tip",
+  prizeValue: parseInt(process.env.PRIZE_VALUE || "5", 10), // Dollar amount for wins
   rateLimitPerIpPerHour: parseInt(process.env.RATE_LIMIT_PER_IP_PER_HOUR || "30", 10),
   siteName: process.env.SITE_NAME || "LukeRewards Spins",
 };

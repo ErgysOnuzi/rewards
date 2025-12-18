@@ -36,6 +36,7 @@ export default function Home() {
         ticketsTotal: data.tickets_total,
         ticketsUsed: data.tickets_used,
         ticketsRemaining: data.tickets_remaining,
+        totalWinnings: data.total_winnings || 0,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred";
@@ -66,6 +67,7 @@ export default function Home() {
     return {
       result: data.result,
       prizeLabel: data.prize_label || undefined,
+      prizeValue: data.prize_value || 0,
       ticketsTotal: data.tickets_total,
       ticketsUsedAfter: data.tickets_used_after,
       ticketsRemainingAfter: data.tickets_remaining_after,
@@ -79,6 +81,7 @@ export default function Home() {
         ticketsTotal: result.ticketsTotal,
         ticketsUsed: result.ticketsUsedAfter,
         ticketsRemaining: result.ticketsRemainingAfter,
+        totalWinnings: ticketData.totalWinnings + result.prizeValue,
       });
     }
 

@@ -76,6 +76,8 @@ export async function registerRoutes(
         const spinCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
         const ticketsUsed = Number(spinCount[0]?.count || 0);
         const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
+        const winningsSum = await db.select({ sum: sql<number>`COALESCE(SUM(prize_value), 0)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
+        const totalWinnings = Number(winningsSum[0]?.sum || 0);
 
         const response: LookupResponse = {
           stake_id: stakeId,
@@ -84,6 +86,7 @@ export async function registerRoutes(
           tickets_total: ticketsTotal,
           tickets_used: ticketsUsed,
           tickets_remaining: ticketsRemaining,
+          total_winnings: totalWinnings,
         };
         return res.json(response);
       }
@@ -96,6 +99,8 @@ export async function registerRoutes(
       const ticketsTotal = calculateTickets(wagerRow.wageredAmount);
       const ticketsUsed = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
+      const winningsSum = await db.select({ sum: sql<number>`COALESCE(SUM(prize_value), 0)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
+      const totalWinnings = Number(winningsSum[0]?.sum || 0);
 
       const response: LookupResponse = {
         stake_id: wagerRow.stakeId,
@@ -104,6 +109,7 @@ export async function registerRoutes(
         tickets_total: ticketsTotal,
         tickets_used: ticketsUsed,
         tickets_remaining: ticketsRemaining,
+        total_winnings: totalWinnings,
       };
 
       return res.json(response);
@@ -151,6 +157,7 @@ export async function registerRoutes(
         
         const result = isGuaranteedWin ? "WIN" : determineSpinResult();
         const prizeLabel = result === "WIN" ? config.prizeLabel : "";
+        const prizeValue = result === "WIN" ? config.prizeValue : 0;
         const ticketsUsedAfter = ticketsUsedBefore + 1;
         const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
@@ -161,6 +168,7 @@ export async function registerRoutes(
           spinNumber,
           result,
           prizeLabel,
+          prizeValue,
           ipHash,
         });
 
@@ -173,6 +181,7 @@ export async function registerRoutes(
           tickets_remaining_after: ticketsRemainingAfter,
           result,
           prize_label: prizeLabel,
+          prize_value: prizeValue,
         };
         return res.json(response);
       }
@@ -192,6 +201,7 @@ export async function registerRoutes(
 
       const result = determineSpinResult();
       const prizeLabel = result === "WIN" ? config.prizeLabel : "";
+      const prizeValue = result === "WIN" ? config.prizeValue : 0;
       const ticketsUsedAfter = ticketsUsedBefore + 1;
       const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
@@ -222,6 +232,7 @@ export async function registerRoutes(
         tickets_remaining_after: ticketsRemainingAfter,
         result,
         prize_label: prizeLabel,
+        prize_value: prizeValue,
       };
 
       return res.json(response);
