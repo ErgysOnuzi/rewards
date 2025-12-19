@@ -2,8 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Loader2, Trophy, X, RotateCw, Gift, Clock } from "lucide-react";
-import { playSpinStart, playSpinTick, playWinSound, playLoseSound, resumeAudioContext } from "@/lib/sounds";
+import { Loader2, Trophy, X, RotateCw, Gift, Clock, Sparkles, Volume2, VolumeX } from "lucide-react";
+import { playSpinStart, playSpinTick, playWinSound, playLoseSound, playBigWinSound, resumeAudioContext, setSoundEnabled, isSoundEnabled } from "@/lib/sounds";
 
 export interface SpinBalances {
   bronze: number;

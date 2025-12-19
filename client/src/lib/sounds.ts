@@ -1,57 +1,99 @@
-const audioContext = typeof window !== "undefined" ? new (window.AudioContext || (window as any).webkitAudioContext)() : null;
+let audioContext: AudioContext | null = null;
+let soundEnabled = true;
+
+function getAudioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  if (!audioContext) {
+    try {
+      audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+    } catch (e) {
+      console.warn("Audio context not available");
+      return null;
+    }
+  }
+  return audioContext;
+}
+
+export function setSoundEnabled(enabled: boolean) {
+  soundEnabled = enabled;
+}
+
+export function isSoundEnabled(): boolean {
+  return soundEnabled;
+}
 
 function playTone(frequency: number, duration: number, type: OscillatorType = "sine", volume: number = 0.3) {
-  if (!audioContext) return;
+  if (!soundEnabled) return;
+  const ctx = getAudioContext();
+  if (!ctx) return;
   
-  const oscillator = audioContext.createOscillator();
-  const gainNode = audioContext.createGain();
-  
-  oscillator.connect(gainNode);
-  gainNode.connect(audioContext.destination);
-  
-  oscillator.type = type;
-  oscillator.frequency.value = frequency;
-  
-  gainNode.gain.setValueAtTime(volume, audioContext.currentTime);
-  gainNode.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + duration);
-  
-  oscillator.start(audioContext.currentTime);
-  oscillator.stop(audioContext.currentTime + duration);
+  try {
+    const oscillator = ctx.createOscillator();
+    const gainNode = ctx.createGain();
+    
+    oscillator.connect(gainNode);
+    gainNode.connect(ctx.destination);
+    
+    oscillator.type = type;
+    oscillator.frequency.value = frequency;
+    
+    const now = ctx.currentTime;
+    gainNode.gain.setValueAtTime(0, now);
+    gainNode.gain.linearRampToValueAtTime(volume, now + 0.01);
+    gainNode.gain.exponentialRampToValueAtTime(0.001, now + duration);
+    
+    oscillator.start(now);
+    oscillator.stop(now + duration);
+  } catch (e) {
+    console.warn("Failed to play tone:", e);
+  }
 }
 
 export function playSpinStart() {
-  if (!audioContext) return;
-  playTone(400, 0.1, "square", 0.2);
-  setTimeout(() => playTone(500, 0.1, "square", 0.2), 100);
-  setTimeout(() => playTone(600, 0.1, "square", 0.2), 200);
+  if (!soundEnabled) return;
+  playTone(440, 0.08, "triangle", 0.15);
+  setTimeout(() => playTone(550, 0.08, "triangle", 0.15), 80);
+  setTimeout(() => playTone(660, 0.1, "triangle", 0.2), 160);
 }
 
 export function playSpinTick() {
-  if (!audioContext) return;
-  playTone(800, 0.05, "square", 0.1);
+  if (!soundEnabled) return;
+  playTone(600 + Math.random() * 200, 0.03, "triangle", 0.08);
 }
 
 export function playWinSound() {
-  if (!audioContext) return;
-  const notes = [523, 659, 784, 1047];
+  if (!soundEnabled) return;
+  const notes = [523, 659, 784, 880, 1047];
   notes.forEach((freq, i) => {
-    setTimeout(() => playTone(freq, 0.2, "sine", 0.3), i * 100);
+    setTimeout(() => playTone(freq, 0.25, "sine", 0.25), i * 80);
   });
   setTimeout(() => {
-    notes.reverse().forEach((freq, i) => {
-      setTimeout(() => playTone(freq, 0.15, "sine", 0.25), i * 80);
-    });
+    playTone(1047, 0.5, "sine", 0.3);
+    playTone(1319, 0.5, "sine", 0.2);
+    playTone(1568, 0.5, "sine", 0.15);
   }, 500);
 }
 
+export function playBigWinSound() {
+  if (!soundEnabled) return;
+  const fanfare = [523, 659, 784, 1047, 1319, 1568];
+  fanfare.forEach((freq, i) => {
+    setTimeout(() => {
+      playTone(freq, 0.3, "sine", 0.3);
+      playTone(freq * 1.5, 0.3, "sine", 0.15);
+    }, i * 100);
+  });
+}
+
 export function playLoseSound() {
-  if (!audioContext) return;
-  playTone(300, 0.3, "sawtooth", 0.15);
-  setTimeout(() => playTone(250, 0.4, "sawtooth", 0.1), 200);
+  if (!soundEnabled) return;
+  playTone(300, 0.2, "sine", 0.1);
+  setTimeout(() => playTone(250, 0.3, "sine", 0.08), 150);
 }
 
 export function resumeAudioContext() {
-  if (audioContext && audioContext.state === "suspended") {
-    audioContext.resume();
+  const ctx = getAudioContext();
+  if (ctx && ctx.state === "suspended") {
+    ctx.resume().catch(() => {});
   }
 }

@@ -14,7 +14,7 @@ import type {
 } from "@shared/schema";
 import { getWagerRow, calculateTickets, determineSpinResult, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
-import { isRateLimited } from "./lib/rateLimit";
+import { isRateLimited, isStakeIdRateLimited } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { ZodError, z } from "zod";
 import { db } from "./db";
@@ -85,11 +85,32 @@ async function getPendingWithdrawals(stakeId: string): Promise<number> {
 }
 
 function getClientIp(req: Request): string {
+  // Use socket IP as primary - more reliable than X-Forwarded-For which can be spoofed
+  const socketIp = req.socket.remoteAddress || "";
+  
+  // Only trust X-Forwarded-For in production behind known proxy
+  // For now, prefer socket IP to prevent spoofing
+  if (socketIp && socketIp !== "::1" && socketIp !== "127.0.0.1") {
+    return socketIp;
+  }
+  
+  // Fallback to forwarded header only for local development
   const forwarded = req.headers["x-forwarded-for"];
   if (typeof forwarded === "string") {
     return forwarded.split(",")[0].trim();
   }
-  return req.socket.remoteAddress || "unknown";
+  
+  return socketIp || "unknown";
+}
+
+// Check if user is blacklisted
+async function isUserBlacklisted(stakeId: string): Promise<boolean> {
+  try {
+    const [flags] = await db.select().from(userFlags).where(eq(userFlags.stakeId, stakeId.toLowerCase()));
+    return flags?.isBlacklisted === true;
+  } catch {
+    return false;
+  }
 }
 
 export async function registerRoutes(
@@ -153,6 +174,16 @@ export async function registerRoutes(
       const parsed = spinRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
       const tier: SpinTier = parsed.tier || "bronze";
+
+      // Check stake ID rate limit
+      if (isStakeIdRateLimited(stakeId)) {
+        return res.status(429).json({ message: "Account rate limit exceeded. Please try again later." } as ErrorResponse);
+      }
+
+      // Check blacklist
+      if (await isUserBlacklisted(stakeId)) {
+        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
+      }
 
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
