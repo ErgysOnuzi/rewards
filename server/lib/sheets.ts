@@ -111,7 +111,9 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
 
   // Start from the row after headers
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
-    const row = rows[i];
+    // Pad row to header length - Google Sheets API truncates trailing empty cells
+    const rawRow = rows[i];
+    const row = [...rawRow, ...Array(Math.max(0, headers.length - rawRow.length)).fill('')];
     const stakeId = (row[stakeIdCol] || "").toString().trim();
     if (!stakeId) continue;
     
@@ -120,12 +122,20 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
     // For duplicates, sum the wagered amounts instead of skipping
     const existing = cache.get(normalizedId);
     
-    // Parse wagered amount - use monthly data
+    // Parse wagered amount - prefer monthly, fall back to weekly, then overall
     let wageredAmount = 0;
+    const parseWager = (val: any): number => {
+      if (!val) return 0;
+      // Remove $ signs, commas and parse
+      return parseFloat(String(val).replace(/[$,]/g, "")) || 0;
+    };
+    
     if (wageredMonthlyIdx >= 0 && row[wageredMonthlyIdx]) {
-      wageredAmount = parseFloat(String(row[wageredMonthlyIdx]).replace(/,/g, "")) || 0;
-    } else if (row[wageredCol]) {
-      wageredAmount = parseFloat(String(row[wageredCol]).replace(/,/g, "")) || 0;
+      wageredAmount = parseWager(row[wageredMonthlyIdx]);
+    } else if (wageredWeeklyIdx >= 0 && row[wageredWeeklyIdx]) {
+      wageredAmount = parseWager(row[wageredWeeklyIdx]);
+    } else if (wageredOverallIdx >= 0 && row[wageredOverallIdx]) {
+      wageredAmount = parseWager(row[wageredOverallIdx]);
     }
     
     // Clamp negative values to 0
