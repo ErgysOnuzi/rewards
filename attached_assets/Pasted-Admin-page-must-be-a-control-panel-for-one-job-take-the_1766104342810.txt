@@ -1,0 +1,82 @@
+Admin page must be a control panel for one job: take the sheet, compute entries, and export/verify. Nothing else.
+
+Admin Page Sections
+
+1) Access control
+	•	Hard gate with ADMIN_PASSWORD (env)
+	•	Session cookie after login (expires in 24h)
+	•	Logout button
+
+2) Data status panel
+	•	Sheet connection mode: api or csv
+	•	Sheet ID / tab name (masked)
+	•	Last fetch time
+	•	Cache TTL
+	•	Row count loaded
+	•	Duplicate User_Name detector result (show count + list first 20 duplicates)
+
+3) Week / campaign selector
+
+Inputs:
+	•	Campaign code/name (free text)
+	•	Week label (free text, example: 2025-12-15_to_2025-12-22)
+	•	Ticket unit (TICKET_UNIT_WAGER) shown + editable override for this export only
+	•	Source wager field dropdown:
+	•	default: Wagered_Weekly
+	•	optionally allow Wagered_Today / Monthly / Overall for testing
+
+4) Summary totals (computed)
+
+Display:
+	•	Total eligible users (tickets > 0)
+	•	Total tickets
+	•	Top 10 users by tickets (Stake ID + tickets)
+	•	Min/Max/Avg wager (for sanity)
+	•	Wager totals (sum of selected wager field)
+
+5) Entry generation preview table
+
+Table with pagination (50 rows/page):
+	•	Stake ID (User_Name)
+	•	Selected wager value
+	•	Tickets = floor(wager / ticketUnit)
+	•	Status flags:
+	•	missing wager -> 0
+	•	negative clamped
+	•	duplicate excluded
+Filters:
+	•	tickets >= N
+	•	search by Stake ID
+
+6) Export tools
+
+Buttons:
+	•	Export CSV (tickets aggregated)
+	•	Columns: stake_id,tickets,campaign,week_label,generated_at
+	•	Export CSV (expanded entries) OPTIONAL
+	•	One row per ticket (only if needed)
+	•	Column: stake_id,entry_id,campaign,week_label
+	•	Copy to clipboard (aggregated)
+	•	Download JSON (aggregated)
+
+7) Audit log (minimal)
+
+List last 20 exports stored server-side:
+	•	generated_at
+	•	campaign
+	•	week_label
+	•	ticketUnit
+	•	rowCount
+	•	totalTickets
+	•	downloaded_by (admin)
+
+8) Safety checks (must)
+	•	“Refresh sheet now” button (bypass cache)
+	•	Validation warnings:
+	•	sheet empty
+	•	column missing
+	•	too many duplicates
+	•	wager field not numeric
+	•	Hard block export if required columns missing.
+
+That’s the admin page.

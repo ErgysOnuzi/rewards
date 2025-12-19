@@ -1,6 +1,5 @@
 import type { Express, Request, Response } from "express";
 import { createServer, type Server } from "http";
-import { randomUUID } from "crypto";
 import { 
   lookupRequestSchema, spinRequestSchema, convertSpinsRequestSchema, 
   purchaseSpinsRequestSchema, withdrawRequestSchema, processWithdrawalSchema,
@@ -9,10 +8,10 @@ import {
   TIER_CONFIG, CONVERSION_RATES, type SpinTier, type SpinBalances
 } from "@shared/schema";
 import type { 
-  LookupResponse, SpinResponse, ErrorResponse, SpinLogRow,
+  LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
-import { getWagerRow, countSpinsForStakeId, appendSpinLogRow, calculateTickets, determineSpinResult } from "./lib/sheets";
+import { getWagerRow, calculateTickets, determineSpinResult } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited } from "./lib/rateLimit";
 import { config } from "./lib/config";
@@ -20,6 +19,14 @@ import { ZodError } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, and } from "drizzle-orm";
 
+
+// Count spins for a user from database
+async function countSpinsForStakeId(stakeId: string): Promise<number> {
+  const result = await db.select({ count: sql<number>`count(*)` })
+    .from(spinLogs)
+    .where(eq(spinLogs.stakeId, stakeId));
+  return Number(result[0]?.count || 0);
+}
 
 // Helper functions for wallet and spin balances
 async function getWalletBalance(stakeId: string): Promise<number> {
@@ -185,24 +192,17 @@ export async function registerRoutes(
       const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
       const prizeValue = result === "WIN" ? tierPrizeValue : 0;
 
-      // Log spin to Google Sheets (only for free ticket spins)
+      // Log spin to database (only for free ticket spins)
       if (!usePurchasedSpin) {
-        const logRow: SpinLogRow = {
-          timestampIso: new Date().toISOString(),
+        await db.insert(spinLogs).values({
           stakeId: wagerRow.stakeId,
           wageredAmount: wagerRow.wageredAmount,
-          ticketsTotal,
-          ticketsUsedBefore,
-          ticketsUsedAfter,
-          ticketsRemainingAfter,
+          spinNumber,
           result,
-          winProbability: config.winProbability,
           prizeLabel,
-          requestId: randomUUID(),
+          prizeValue,
           ipHash,
-          userAgent: req.headers["user-agent"] || "unknown",
-        };
-        await appendSpinLogRow(logRow);
+        });
       }
 
       // Add winnings to wallet if won
