@@ -1,12 +1,22 @@
+import { useState, useEffect } from "react";
 import { useQuery, useMutation } from "@tanstack/react-query";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { 
+  Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban, 
+  Search, Shield, AlertTriangle, Settings, Download, Database,
+  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient } from "@/lib/queryClient";
+import { queryClient, apiRequest } from "@/lib/queryClient";
 
 interface SpinLog {
   timestamp: string;
@@ -18,8 +28,6 @@ interface SpinLog {
 }
 
 interface AdminLogsResponse {
-  mode: "demo" | "sheets";
-  message?: string;
   logs: SpinLog[];
   totalSpins: number;
   totalWins: number;
@@ -35,149 +43,380 @@ interface WithdrawalRequest {
   adminNotes: string | null;
 }
 
-interface WithdrawalsResponse {
-  withdrawals: WithdrawalRequest[];
+interface UserFlag {
+  id: number;
+  stakeId: string;
+  isBlacklisted: boolean;
+  isAllowlisted: boolean;
+  isDisputed: boolean;
+  notes: string | null;
+  updatedAt: string;
+}
+
+interface DataStatus {
+  sheetId: string;
+  tabName: string;
+  loaded: boolean;
+  rowCount: number;
+  lastFetchTime: string | null;
+  cacheTtlMs: number;
+  cacheAge: number;
+  isExpired: boolean;
+  duplicateCount: number;
+  duplicates: string[];
+}
+
+interface RateStats {
+  spinsLastHour: number;
+  bonusDenials: number;
+  topSpinners: { stakeId: string; count: number }[];
+  ipAnomalies: { ipHash: string; stakeIds: string; idCount: number }[];
+}
+
+interface UserLookup {
+  found: boolean;
+  wagerData: { stakeId: string; wageredAmount: number; periodLabel: string } | null;
+  sheetLastUpdated: string | null;
+  computedTickets: number;
+  localStats: {
+    totalSpins: number;
+    wins: number;
+    lastSpinTime: string | null;
+    walletBalance: number;
+    spinBalances: { bronze: number; silver: number; gold: number };
+  };
+  flags: UserFlag | null;
+  recentTransactions: { type: string; amount: number; description: string; createdAt: string }[];
+}
+
+interface FeatureToggles {
+  [key: string]: { value: string; description: string };
+}
+
+interface Payout {
+  id: number;
+  stakeId: string;
+  amount: number;
+  prize: string | null;
+  status: string;
+  transactionHash: string | null;
+  createdAt: string;
+  processedAt: string | null;
+}
+
+interface ExportLog {
+  id: number;
+  campaign: string;
+  weekLabel: string;
+  ticketUnit: number;
+  rowCount: number;
+  totalTickets: number;
+  dataHash: string | null;
+  createdAt: string;
+}
+
+function AdminLogin({ onLogin }: { onLogin: () => void }) {
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const { toast } = useToast();
+
+  const loginMutation = useMutation({
+    mutationFn: async (password: string) => {
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+        credentials: "include",
+      });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Login failed");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      onLogin();
+      toast({ title: "Logged in", description: "Welcome to the admin panel" });
+    },
+    onError: (err: Error) => {
+      setError(err.message);
+    },
+  });
+
+  return (
+    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+      <Card className="w-full max-w-md">
+        <CardHeader className="text-center">
+          <Lock className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
+          <CardTitle>Admin Access</CardTitle>
+          <CardDescription>Enter the admin password to continue</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <form onSubmit={(e) => { e.preventDefault(); loginMutation.mutate(password); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="password">Password</Label>
+              <Input
+                id="password"
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter admin password"
+                data-testid="input-admin-password"
+              />
+            </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
+            <Button type="submit" className="w-full" disabled={loginMutation.isPending} data-testid="button-admin-login">
+              {loginMutation.isPending ? "Logging in..." : "Login"}
+            </Button>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  );
 }
 
 export default function Admin() {
   const { toast } = useToast();
-  
-  const { data, isLoading, refetch } = useQuery<AdminLogsResponse>({
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [lookupId, setLookupId] = useState("");
+  const [lookupResult, setLookupResult] = useState<UserLookup | null>(null);
+  const [newFlag, setNewFlag] = useState({ stakeId: "", isBlacklisted: false, isAllowlisted: false, isDisputed: false, notes: "" });
+  const [exportParams, setExportParams] = useState({ campaign: "", weekLabel: "", ticketUnit: 1000, wagerField: "Wagered_Weekly" });
+  const [exportPreview, setExportPreview] = useState<any>(null);
+
+  useEffect(() => {
+    fetch("/api/admin/verify", { credentials: "include" })
+      .then(res => res.json())
+      .then(data => setIsAuthenticated(data.authenticated))
+      .catch(() => setIsAuthenticated(false));
+  }, []);
+
+  const logout = async () => {
+    await fetch("/api/admin/logout", { method: "POST", credentials: "include" });
+    setIsAuthenticated(false);
+  };
+
+  const { data: logsData, refetch: refetchLogs } = useQuery<AdminLogsResponse>({
     queryKey: ["/api/admin/logs"],
-    refetchInterval: 5000,
+    enabled: isAuthenticated === true,
+    refetchInterval: 10000,
   });
 
-  const { data: withdrawalsData, isLoading: withdrawalsLoading, refetch: refetchWithdrawals } = useQuery<WithdrawalsResponse>({
+  const { data: withdrawalsData, refetch: refetchWithdrawals } = useQuery<{ withdrawals: WithdrawalRequest[] }>({
     queryKey: ["/api/admin/withdrawals"],
-    refetchInterval: 5000,
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: dataStatus, refetch: refetchStatus } = useQuery<DataStatus>({
+    queryKey: ["/api/admin/data-status"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: rateStats, refetch: refetchRateStats } = useQuery<RateStats>({
+    queryKey: ["/api/admin/rate-stats"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: userFlags, refetch: refetchFlags } = useQuery<{ flags: UserFlag[] }>({
+    queryKey: ["/api/admin/user-flags"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: togglesData, refetch: refetchToggles } = useQuery<{ toggles: FeatureToggles }>({
+    queryKey: ["/api/admin/toggles"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: payoutsData, refetch: refetchPayouts } = useQuery<{ payouts: Payout[] }>({
+    queryKey: ["/api/admin/payouts"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: exportLogs } = useQuery<{ logs: ExportLog[] }>({
+    queryKey: ["/api/admin/export/logs"],
+    enabled: isAuthenticated === true,
   });
 
   const processWithdrawal = useMutation({
-    mutationFn: async ({ id, status, admin_notes }: { id: number; status: "approved" | "rejected"; admin_notes?: string }) => {
-      const response = await fetch("/api/admin/withdrawals/process", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id, status, admin_notes }),
-      });
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || "Failed to process withdrawal");
-      }
-      return response.json();
+    mutationFn: async ({ id, status }: { id: number; status: "approved" | "rejected" }) => {
+      return apiRequest("/api/admin/withdrawals/process", "POST", { id, status });
     },
-    onSuccess: (_, variables) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
-      toast({
-        title: "Withdrawal Processed",
-        description: `Withdrawal ${variables.status === "approved" ? "approved" : "rejected"} successfully.`,
-      });
-    },
-    onError: (error: Error) => {
-      toast({
-        title: "Error",
-        description: error.message,
-        variant: "destructive",
-      });
+      toast({ title: "Withdrawal processed" });
     },
   });
 
-  const formatTime = (iso: string) => {
-    const date = new Date(iso);
-    return date.toLocaleTimeString();
+  const refreshCache = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/refresh-cache", { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to refresh");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      refetchStatus();
+      toast({ title: "Cache refreshed", description: `Loaded ${data.rowCount} rows` });
+    },
+  });
+
+  const userLookup = async () => {
+    if (!lookupId.trim()) return;
+    const res = await fetch(`/api/admin/user-lookup/${encodeURIComponent(lookupId)}`, { credentials: "include" });
+    const data = await res.json();
+    setLookupResult(data);
   };
 
-  const formatDate = (iso: string) => {
-    const date = new Date(iso);
-    return date.toLocaleDateString() + " " + date.toLocaleTimeString();
+  const saveFlag = useMutation({
+    mutationFn: async (flag: typeof newFlag) => {
+      return apiRequest("/api/admin/user-flags", "POST", flag);
+    },
+    onSuccess: () => {
+      refetchFlags();
+      setNewFlag({ stakeId: "", isBlacklisted: false, isAllowlisted: false, isDisputed: false, notes: "" });
+      toast({ title: "Flag saved" });
+    },
+  });
+
+  const deleteFlag = useMutation({
+    mutationFn: async (stakeId: string) => {
+      await fetch(`/api/admin/user-flags/${encodeURIComponent(stakeId)}`, { method: "DELETE", credentials: "include" });
+    },
+    onSuccess: () => {
+      refetchFlags();
+      toast({ title: "Flag removed" });
+    },
+  });
+
+  const updateToggle = useMutation({
+    mutationFn: async ({ key, value }: { key: string; value: string }) => {
+      return apiRequest("/api/admin/toggles", "POST", { key, value });
+    },
+    onSuccess: () => {
+      refetchToggles();
+      toast({ title: "Toggle updated" });
+    },
+  });
+
+  const generateExport = async () => {
+    const res = await fetch("/api/admin/export/generate", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(exportParams),
+      credentials: "include",
+    });
+    const data = await res.json();
+    
+    const csv = "stake_id,tickets,campaign,week_label,generated_at\n" + 
+      data.entries.map((e: any) => `${e.stake_id},${e.tickets},${e.campaign},${e.week_label},${e.generated_at}`).join("\n");
+    
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `raffle_export_${exportParams.campaign}_${exportParams.weekLabel}.csv`;
+    a.click();
+    
+    queryClient.invalidateQueries({ queryKey: ["/api/admin/export/logs"] });
+    toast({ title: "Export generated", description: `${data.rowCount} entries, ${data.totalTickets} tickets` });
   };
 
-  const formatAmount = (amount: number) => {
-    return new Intl.NumberFormat("en-US", {
-      style: "currency",
-      currency: "USD",
-      minimumFractionDigits: 0,
-    }).format(amount);
+  const previewExport = async () => {
+    const res = await fetch("/api/admin/export/preview", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(exportParams),
+      credentials: "include",
+    });
+    const data = await res.json();
+    setExportPreview(data);
   };
+
+  const downloadBackup = async () => {
+    const res = await fetch("/api/admin/backup-export", { credentials: "include" });
+    const data = await res.json();
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `backup_${new Date().toISOString().split("T")[0]}.json`;
+    a.click();
+    toast({ title: "Backup downloaded" });
+  };
+
+  const formatDate = (iso: string) => new Date(iso).toLocaleString();
+  const formatAmount = (n: number) => new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(n);
+
+  if (isAuthenticated === null) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><RefreshCw className="w-8 h-8 animate-spin text-muted-foreground" /></div>;
+  }
+
+  if (!isAuthenticated) {
+    return <AdminLogin onLogin={() => setIsAuthenticated(true)} />;
+  }
 
   const pendingWithdrawals = withdrawalsData?.withdrawals.filter(w => w.status === "pending") || [];
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="max-w-4xl mx-auto px-4 py-8 space-y-6">
+      <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         <div className="flex items-center justify-between gap-4 flex-wrap">
           <div>
-            <h1 className="text-2xl font-bold text-foreground">Admin Dashboard</h1>
-            <p className="text-muted-foreground">
-              {data?.mode === "demo" ? "Demo Mode - Data persists in database" : "Connected to Google Sheets"}
-            </p>
+            <h1 className="text-2xl font-bold">Admin Control Panel</h1>
+            <p className="text-muted-foreground">Manage users, exports, and system settings</p>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button variant="outline" size="icon" onClick={() => { refetch(); refetchWithdrawals(); }} data-testid="button-refresh">
+            <Button variant="outline" size="icon" onClick={() => { refetchLogs(); refetchWithdrawals(); refetchStatus(); refetchRateStats(); }} data-testid="button-refresh-all">
               <RotateCw className="w-4 h-4" />
             </Button>
+            <Button variant="outline" onClick={logout} data-testid="button-logout">
+              <LogOut className="w-4 h-4 mr-2" /> Logout
+            </Button>
             <Link href="/">
-              <Button variant="outline" data-testid="link-home">Back to Spin</Button>
+              <Button variant="outline" data-testid="link-home">Back to Site</Button>
             </Link>
           </div>
         </div>
 
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-md bg-muted">
-                  <RotateCw className="w-5 h-5 text-muted-foreground" />
-                </div>
+                <div className="p-2 rounded-md bg-muted"><RotateCw className="w-5 h-5 text-muted-foreground" /></div>
                 <div>
-                  <p className="text-2xl font-bold font-mono" data-testid="text-total-spins">{data?.totalSpins ?? 0}</p>
+                  <p className="text-2xl font-bold font-mono">{logsData?.totalSpins ?? 0}</p>
                   <p className="text-sm text-muted-foreground">Total Spins</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-md bg-primary/10">
-                  <Trophy className="w-5 h-5 text-primary" />
-                </div>
+                <div className="p-2 rounded-md bg-primary/10"><Trophy className="w-5 h-5 text-primary" /></div>
                 <div>
-                  <p className="text-2xl font-bold font-mono text-primary" data-testid="text-total-wins">{data?.totalWins ?? 0}</p>
+                  <p className="text-2xl font-bold font-mono text-primary">{logsData?.totalWins ?? 0}</p>
                   <p className="text-sm text-muted-foreground">Total Wins</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-md bg-muted">
-                  <Users className="w-5 h-5 text-muted-foreground" />
-                </div>
+                <div className="p-2 rounded-md bg-muted"><Activity className="w-5 h-5 text-muted-foreground" /></div>
                 <div>
-                  <p className="text-2xl font-bold font-mono" data-testid="text-win-rate">
-                    {data && data.totalSpins > 0 
-                      ? ((data.totalWins / data.totalSpins) * 100).toFixed(1) 
-                      : "0"}%
-                  </p>
-                  <p className="text-sm text-muted-foreground">Win Rate</p>
+                  <p className="text-2xl font-bold font-mono">{rateStats?.spinsLastHour ?? 0}</p>
+                  <p className="text-sm text-muted-foreground">Spins/Hour</p>
                 </div>
               </div>
             </CardContent>
           </Card>
-
           <Card>
             <CardContent className="pt-6">
               <div className="flex items-center gap-3">
-                <div className="p-2 rounded-md bg-yellow-500/10">
-                  <ArrowUpFromLine className="w-5 h-5 text-yellow-500" />
-                </div>
+                <div className="p-2 rounded-md bg-yellow-500/10"><ArrowUpFromLine className="w-5 h-5 text-yellow-500" /></div>
                 <div>
-                  <p className="text-2xl font-bold font-mono text-yellow-500" data-testid="text-pending-withdrawals">
-                    {pendingWithdrawals.length}
-                  </p>
+                  <p className="text-2xl font-bold font-mono text-yellow-500">{pendingWithdrawals.length}</p>
                   <p className="text-sm text-muted-foreground">Pending Withdrawals</p>
                 </div>
               </div>
@@ -185,63 +424,253 @@ export default function Admin() {
           </Card>
         </div>
 
-        <Tabs defaultValue="spins">
-          <TabsList>
-            <TabsTrigger value="spins" data-testid="tab-spins">Recent Spins</TabsTrigger>
+        <Tabs defaultValue="status">
+          <TabsList className="flex-wrap">
+            <TabsTrigger value="status" data-testid="tab-status"><Database className="w-4 h-4 mr-1" /> Data Status</TabsTrigger>
+            <TabsTrigger value="lookup" data-testid="tab-lookup"><Search className="w-4 h-4 mr-1" /> User Lookup</TabsTrigger>
+            <TabsTrigger value="flags" data-testid="tab-flags"><Shield className="w-4 h-4 mr-1" /> User Flags</TabsTrigger>
+            <TabsTrigger value="rate" data-testid="tab-rate"><AlertTriangle className="w-4 h-4 mr-1" /> Abuse Monitor</TabsTrigger>
             <TabsTrigger value="withdrawals" data-testid="tab-withdrawals">
-              Withdrawals
-              {pendingWithdrawals.length > 0 && (
-                <Badge variant="destructive" className="ml-2 h-5 min-w-5 px-1">
-                  {pendingWithdrawals.length}
-                </Badge>
-              )}
+              <ArrowUpFromLine className="w-4 h-4 mr-1" /> Withdrawals
+              {pendingWithdrawals.length > 0 && <Badge variant="destructive" className="ml-1">{pendingWithdrawals.length}</Badge>}
             </TabsTrigger>
+            <TabsTrigger value="export" data-testid="tab-export"><Download className="w-4 h-4 mr-1" /> Export</TabsTrigger>
+            <TabsTrigger value="toggles" data-testid="tab-toggles"><Settings className="w-4 h-4 mr-1" /> Toggles</TabsTrigger>
+            <TabsTrigger value="spins" data-testid="tab-spins"><Eye className="w-4 h-4 mr-1" /> Spins Log</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="spins">
+          <TabsContent value="status" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <CardTitle>Data Status</CardTitle>
+                <Button onClick={() => refreshCache.mutate()} disabled={refreshCache.isPending} data-testid="button-refresh-cache">
+                  <RefreshCw className={`w-4 h-4 mr-2 ${refreshCache.isPending ? "animate-spin" : ""}`} />
+                  Refresh Cache
+                </Button>
+              </CardHeader>
+              <CardContent className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <p><span className="text-muted-foreground">Sheet ID:</span> {dataStatus?.sheetId}</p>
+                  <p><span className="text-muted-foreground">Tab:</span> {dataStatus?.tabName}</p>
+                  <p><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus?.rowCount ?? 0}</p>
+                  <p><span className="text-muted-foreground">Cache TTL:</span> {dataStatus?.cacheTtlMs ? `${dataStatus.cacheTtlMs / 1000}s` : "N/A"}</p>
+                </div>
+                <div className="space-y-2">
+                  <p><span className="text-muted-foreground">Last Fetch:</span> {dataStatus?.lastFetchTime ? formatDate(dataStatus.lastFetchTime) : "Never"}</p>
+                  <p><span className="text-muted-foreground">Cache Age:</span> {dataStatus?.cacheAge ? `${Math.round(dataStatus.cacheAge / 1000)}s` : "N/A"}</p>
+                  <p className="flex items-center gap-2">
+                    <span className="text-muted-foreground">Status:</span>
+                    <Badge variant={dataStatus?.isExpired ? "destructive" : "default"}>{dataStatus?.isExpired ? "Expired" : "Fresh"}</Badge>
+                  </p>
+                  <p><span className="text-muted-foreground">Duplicates:</span> {dataStatus?.duplicateCount ?? 0}</p>
+                </div>
+                {dataStatus?.duplicates && dataStatus.duplicates.length > 0 && (
+                  <div className="md:col-span-2">
+                    <p className="text-sm text-destructive">Duplicate usernames: {dataStatus.duplicates.join(", ")}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="lookup" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle className="text-lg">Recent Spins</CardTitle>
+                <CardTitle>User Lookup</CardTitle>
+                <CardDescription>Search for a Stake ID to view all details</CardDescription>
               </CardHeader>
-              <CardContent>
-                {isLoading ? (
-                  <div className="text-center py-8 text-muted-foreground">Loading...</div>
-                ) : data?.logs.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No spins yet. Spins will appear here in real-time.
-                  </div>
-                ) : (
-                  <div className="space-y-2">
-                    {data?.logs.map((log, index) => (
-                      <div
-                        key={`${log.timestamp}-${index}`}
-                        className={`flex items-center justify-between gap-4 p-3 rounded-md ${
-                          log.result === "WIN" ? "bg-primary/10 border border-primary/20" : "bg-muted/50"
-                        }`}
-                        data-testid={`row-spin-${index}`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          {log.result === "WIN" ? (
-                            <Trophy className="w-5 h-5 text-primary flex-shrink-0" />
-                          ) : (
-                            <X className="w-5 h-5 text-muted-foreground flex-shrink-0" />
-                          )}
-                          <div className="min-w-0">
-                            <p className="font-medium truncate" data-testid={`text-stake-id-${index}`}>{log.stakeId}</p>
-                            <p className="text-sm text-muted-foreground">
-                              Spin #{log.spinNumber} · {formatAmount(log.wageredAmount)} wagered
-                            </p>
+              <CardContent className="space-y-4">
+                <div className="flex gap-2">
+                  <Input 
+                    placeholder="Enter Stake ID" 
+                    value={lookupId} 
+                    onChange={(e) => setLookupId(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && userLookup()}
+                    data-testid="input-lookup-id"
+                  />
+                  <Button onClick={userLookup} data-testid="button-lookup">
+                    <Search className="w-4 h-4 mr-2" /> Lookup
+                  </Button>
+                </div>
+
+                {lookupResult && (
+                  <div className="space-y-4 pt-4 border-t">
+                    {!lookupResult.found ? (
+                      <p className="text-destructive">User not found in sheet data</p>
+                    ) : (
+                      <>
+                        <div className="grid md:grid-cols-2 gap-4">
+                          <div>
+                            <h4 className="font-medium mb-2">Sheet Data</h4>
+                            <p><span className="text-muted-foreground">Stake ID:</span> {lookupResult.wagerData?.stakeId}</p>
+                            <p><span className="text-muted-foreground">Wagered:</span> {formatAmount(lookupResult.wagerData?.wageredAmount ?? 0)}</p>
+                            <p><span className="text-muted-foreground">Period:</span> {lookupResult.wagerData?.periodLabel}</p>
+                            <p><span className="text-muted-foreground">Tickets:</span> {lookupResult.computedTickets}</p>
+                            <p><span className="text-muted-foreground">Last Updated:</span> {lookupResult.sheetLastUpdated ? formatDate(lookupResult.sheetLastUpdated) : "N/A"}</p>
+                          </div>
+                          <div>
+                            <h4 className="font-medium mb-2">Local Stats</h4>
+                            <p><span className="text-muted-foreground">Spins:</span> {lookupResult.localStats.totalSpins}</p>
+                            <p><span className="text-muted-foreground">Wins:</span> {lookupResult.localStats.wins}</p>
+                            <p><span className="text-muted-foreground">Wallet:</span> {formatAmount(lookupResult.localStats.walletBalance)}</p>
+                            <p><span className="text-muted-foreground">Bronze Spins:</span> {lookupResult.localStats.spinBalances.bronze}</p>
+                            <p><span className="text-muted-foreground">Silver Spins:</span> {lookupResult.localStats.spinBalances.silver}</p>
+                            <p><span className="text-muted-foreground">Gold Spins:</span> {lookupResult.localStats.spinBalances.gold}</p>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {log.result === "WIN" && (
-                            <Badge variant="default" className="bg-primary" data-testid={`badge-win-${index}`}>
-                              {log.prizeLabel || "WIN"}
-                            </Badge>
+                        {lookupResult.flags && (
+                          <div className="flex gap-2 flex-wrap">
+                            {lookupResult.flags.isBlacklisted && <Badge variant="destructive">Blacklisted</Badge>}
+                            {lookupResult.flags.isAllowlisted && <Badge variant="default">Allowlisted</Badge>}
+                            {lookupResult.flags.isDisputed && <Badge variant="secondary">Disputed</Badge>}
+                            {lookupResult.flags.notes && <span className="text-sm text-muted-foreground">Notes: {lookupResult.flags.notes}</span>}
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="flags" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>User Flags</CardTitle>
+                <CardDescription>Manage blacklist, allowlist, and disputed users</CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4 p-4 border rounded-md">
+                  <div className="space-y-2">
+                    <Label>Stake ID</Label>
+                    <Input value={newFlag.stakeId} onChange={(e) => setNewFlag({ ...newFlag, stakeId: e.target.value })} placeholder="Enter Stake ID" data-testid="input-flag-stake-id" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Notes</Label>
+                    <Input value={newFlag.notes} onChange={(e) => setNewFlag({ ...newFlag, notes: e.target.value })} placeholder="Optional notes" data-testid="input-flag-notes" />
+                  </div>
+                  <div className="flex items-center gap-4 flex-wrap">
+                    <label className="flex items-center gap-2">
+                      <Switch checked={newFlag.isBlacklisted} onCheckedChange={(v) => setNewFlag({ ...newFlag, isBlacklisted: v })} />
+                      <span>Blacklist</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <Switch checked={newFlag.isAllowlisted} onCheckedChange={(v) => setNewFlag({ ...newFlag, isAllowlisted: v })} />
+                      <span>Allowlist</span>
+                    </label>
+                    <label className="flex items-center gap-2">
+                      <Switch checked={newFlag.isDisputed} onCheckedChange={(v) => setNewFlag({ ...newFlag, isDisputed: v })} />
+                      <span>Disputed</span>
+                    </label>
+                  </div>
+                  <div className="flex items-end">
+                    <Button onClick={() => saveFlag.mutate(newFlag)} disabled={!newFlag.stakeId || saveFlag.isPending} data-testid="button-save-flag">
+                      Save Flag
+                    </Button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  {userFlags?.flags.map((flag) => (
+                    <div key={flag.id} className="flex items-center justify-between gap-4 p-3 border rounded-md">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{flag.stakeId}</span>
+                        {flag.isBlacklisted && <Badge variant="destructive">Blacklisted</Badge>}
+                        {flag.isAllowlisted && <Badge>Allowlisted</Badge>}
+                        {flag.isDisputed && <Badge variant="secondary">Disputed</Badge>}
+                        {flag.notes && <span className="text-sm text-muted-foreground">{flag.notes}</span>}
+                      </div>
+                      <Button variant="ghost" size="icon" onClick={() => deleteFlag.mutate(flag.stakeId)} data-testid={`button-delete-flag-${flag.stakeId}`}>
+                        <X className="w-4 h-4" />
+                      </Button>
+                    </div>
+                  ))}
+                  {(!userFlags?.flags || userFlags.flags.length === 0) && (
+                    <p className="text-center text-muted-foreground py-4">No user flags set</p>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="rate" className="space-y-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Top Spinners (Last Hour)</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {rateStats?.topSpinners.length === 0 ? (
+                    <p className="text-muted-foreground">No spins in the last hour</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {rateStats?.topSpinners.map((s, i) => (
+                        <div key={s.stakeId} className="flex justify-between items-center p-2 border rounded-md">
+                          <span className="font-medium">{s.stakeId}</span>
+                          <Badge variant="secondary">{s.count} spins</Badge>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle>IP Anomalies</CardTitle>
+                  <CardDescription>Same IP using multiple Stake IDs</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {rateStats?.ipAnomalies.length === 0 ? (
+                    <p className="text-muted-foreground">No anomalies detected</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {rateStats?.ipAnomalies.map((a, i) => (
+                        <div key={a.ipHash} className="p-2 border rounded-md">
+                          <div className="flex justify-between items-center mb-1">
+                            <span className="font-mono text-sm">{a.ipHash.slice(0, 12)}...</span>
+                            <Badge variant="destructive">{a.idCount} IDs</Badge>
+                          </div>
+                          <p className="text-sm text-muted-foreground truncate">{a.stakeIds}</p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
+          </TabsContent>
+
+          <TabsContent value="withdrawals" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Withdrawal Requests</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {withdrawalsData?.withdrawals.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No withdrawal requests</p>
+                ) : (
+                  <div className="space-y-2">
+                    {withdrawalsData?.withdrawals.map((w) => (
+                      <div key={w.id} className={`flex items-center justify-between gap-4 p-3 rounded-md border ${w.status === "pending" ? "border-yellow-500/50 bg-yellow-500/5" : ""}`}>
+                        <div>
+                          <p className="font-medium">{w.stakeId}</p>
+                          <p className="text-sm text-muted-foreground">{formatAmount(w.amount)} - {formatDate(w.createdAt)}</p>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {w.status === "pending" ? (
+                            <>
+                              <Button size="sm" onClick={() => processWithdrawal.mutate({ id: w.id, status: "approved" })} disabled={processWithdrawal.isPending}>
+                                <Check className="w-4 h-4 mr-1" /> Approve
+                              </Button>
+                              <Button size="sm" variant="outline" onClick={() => processWithdrawal.mutate({ id: w.id, status: "rejected" })} disabled={processWithdrawal.isPending}>
+                                <Ban className="w-4 h-4 mr-1" /> Reject
+                              </Button>
+                            </>
+                          ) : (
+                            <Badge variant={w.status === "approved" ? "default" : "secondary"}>{w.status}</Badge>
                           )}
-                          <span className="text-sm text-muted-foreground whitespace-nowrap">
-                            {formatTime(log.timestamp)}
-                          </span>
                         </div>
                       </div>
                     ))}
@@ -251,79 +680,156 @@ export default function Admin() {
             </Card>
           </TabsContent>
 
-          <TabsContent value="withdrawals">
+          <TabsContent value="export" className="space-y-4">
             <Card>
-              <CardHeader>
-                <CardTitle className="text-lg">Withdrawal Requests</CardTitle>
+              <CardHeader className="flex flex-row items-center justify-between gap-4">
+                <div>
+                  <CardTitle>Raffle Export</CardTitle>
+                  <CardDescription>Generate ticket entries for raffle</CardDescription>
+                </div>
+                <Button variant="outline" onClick={downloadBackup} data-testid="button-backup">
+                  <FileDown className="w-4 h-4 mr-2" /> Backup Data
+                </Button>
               </CardHeader>
-              <CardContent>
-                {withdrawalsLoading ? (
-                  <div className="text-center py-8 text-muted-foreground">Loading...</div>
-                ) : withdrawalsData?.withdrawals.length === 0 ? (
-                  <div className="text-center py-8 text-muted-foreground">
-                    No withdrawal requests yet.
-                  </div>
-                ) : (
+              <CardContent className="space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
                   <div className="space-y-2">
-                    {withdrawalsData?.withdrawals.map((withdrawal, index) => (
-                      <div
-                        key={withdrawal.id}
-                        className={`flex items-center justify-between gap-4 p-3 rounded-md ${
-                          withdrawal.status === "pending" 
-                            ? "bg-yellow-500/10 border border-yellow-500/20"
-                            : withdrawal.status === "approved"
-                            ? "bg-primary/10 border border-primary/20"
-                            : "bg-muted/50"
-                        }`}
-                        data-testid={`row-withdrawal-${index}`}
-                      >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <ArrowUpFromLine className={`w-5 h-5 flex-shrink-0 ${
-                            withdrawal.status === "pending" 
-                              ? "text-yellow-500"
-                              : withdrawal.status === "approved"
-                              ? "text-primary"
-                              : "text-muted-foreground"
-                          }`} />
-                          <div className="min-w-0">
-                            <p className="font-medium truncate">{withdrawal.stakeId}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {formatAmount(withdrawal.amount)} · {formatDate(withdrawal.createdAt)}
-                            </p>
+                    <Label>Campaign Name</Label>
+                    <Input value={exportParams.campaign} onChange={(e) => setExportParams({ ...exportParams, campaign: e.target.value })} placeholder="e.g. December Raffle" data-testid="input-campaign" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Week Label</Label>
+                    <Input value={exportParams.weekLabel} onChange={(e) => setExportParams({ ...exportParams, weekLabel: e.target.value })} placeholder="e.g. 2024-12-15_to_2024-12-22" data-testid="input-week-label" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Ticket Unit ($/ticket)</Label>
+                    <Input type="number" value={exportParams.ticketUnit} onChange={(e) => setExportParams({ ...exportParams, ticketUnit: parseInt(e.target.value) || 1000 })} data-testid="input-ticket-unit" />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Wager Field</Label>
+                    <Select value={exportParams.wagerField} onValueChange={(v) => setExportParams({ ...exportParams, wagerField: v })}>
+                      <SelectTrigger data-testid="select-wager-field">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Wagered_Weekly">Wagered_Weekly</SelectItem>
+                        <SelectItem value="Wagered_Monthly">Wagered_Monthly</SelectItem>
+                        <SelectItem value="Wagered_Overall">Wagered_Overall</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 flex-wrap">
+                  <Button variant="outline" onClick={previewExport} disabled={!exportParams.campaign || !exportParams.weekLabel} data-testid="button-preview">
+                    <Eye className="w-4 h-4 mr-2" /> Preview
+                  </Button>
+                  <Button onClick={generateExport} disabled={!exportParams.campaign || !exportParams.weekLabel} data-testid="button-export">
+                    <Download className="w-4 h-4 mr-2" /> Export CSV
+                  </Button>
+                </div>
+
+                {exportPreview && (
+                  <div className="p-4 border rounded-md space-y-2">
+                    <h4 className="font-medium">Preview Summary</h4>
+                    <div className="grid md:grid-cols-3 gap-4 text-sm">
+                      <p><span className="text-muted-foreground">Eligible Users:</span> {exportPreview.summary.eligibleUsers}</p>
+                      <p><span className="text-muted-foreground">Total Tickets:</span> {exportPreview.summary.totalTickets}</p>
+                      <p><span className="text-muted-foreground">Total Wager:</span> {formatAmount(exportPreview.summary.totalWager)}</p>
+                      <p><span className="text-muted-foreground">Min Wager:</span> {formatAmount(exportPreview.summary.minWager)}</p>
+                      <p><span className="text-muted-foreground">Max Wager:</span> {formatAmount(exportPreview.summary.maxWager)}</p>
+                      <p><span className="text-muted-foreground">Avg Wager:</span> {formatAmount(exportPreview.summary.avgWager)}</p>
+                    </div>
+                    <div>
+                      <h5 className="text-sm font-medium mt-2">Top 10:</h5>
+                      <div className="flex gap-2 flex-wrap mt-1">
+                        {exportPreview.summary.top10.map((e: any) => (
+                          <Badge key={e.stakeId} variant="outline">{e.stakeId}: {e.tickets}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {exportLogs?.logs && exportLogs.logs.length > 0 && (
+                  <div className="pt-4 border-t">
+                    <h4 className="font-medium mb-2">Recent Exports</h4>
+                    <div className="space-y-2">
+                      {exportLogs.logs.slice(0, 5).map((log) => (
+                        <div key={log.id} className="flex items-center justify-between text-sm p-2 border rounded-md">
+                          <div>
+                            <span className="font-medium">{log.campaign}</span> - {log.weekLabel}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className="text-muted-foreground">{log.rowCount} entries, {log.totalTickets} tickets</span>
+                            <span className="text-muted-foreground">{formatDate(log.createdAt)}</span>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {withdrawal.status === "pending" ? (
-                            <>
-                              <Button
-                                size="sm"
-                                variant="default"
-                                disabled={processWithdrawal.isPending}
-                                onClick={() => processWithdrawal.mutate({ id: withdrawal.id, status: "approved" })}
-                                data-testid={`button-approve-${index}`}
-                              >
-                                <Check className="w-4 h-4 mr-1" />
-                                Approve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                disabled={processWithdrawal.isPending}
-                                onClick={() => processWithdrawal.mutate({ id: withdrawal.id, status: "rejected" })}
-                                data-testid={`button-reject-${index}`}
-                              >
-                                <Ban className="w-4 h-4 mr-1" />
-                                Reject
-                              </Button>
-                            </>
-                          ) : (
-                            <Badge 
-                              variant={withdrawal.status === "approved" ? "default" : "secondary"}
-                              className={withdrawal.status === "approved" ? "bg-primary" : ""}
-                            >
-                              {withdrawal.status.charAt(0).toUpperCase() + withdrawal.status.slice(1)}
-                            </Badge>
-                          )}
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="toggles" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Feature Toggles</CardTitle>
+                <CardDescription>Runtime configuration settings</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {togglesData?.toggles && Object.entries(togglesData.toggles).map(([key, toggle]) => (
+                    <div key={key} className="flex items-center justify-between gap-4 p-3 border rounded-md">
+                      <div>
+                        <p className="font-medium font-mono">{key}</p>
+                        <p className="text-sm text-muted-foreground">{toggle.description}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        {toggle.value === "true" || toggle.value === "false" ? (
+                          <Switch 
+                            checked={toggle.value === "true"} 
+                            onCheckedChange={(v) => updateToggle.mutate({ key, value: v ? "true" : "false" })}
+                          />
+                        ) : (
+                          <Input 
+                            className="w-24" 
+                            value={toggle.value} 
+                            onChange={(e) => updateToggle.mutate({ key, value: e.target.value })}
+                          />
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="spins" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>Recent Spins</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {logsData?.logs.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8">No spins yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {logsData?.logs.map((log, i) => (
+                      <div key={`${log.timestamp}-${i}`} className={`flex items-center justify-between gap-4 p-3 rounded-md ${log.result === "WIN" ? "bg-primary/10" : "bg-muted/50"}`}>
+                        <div className="flex items-center gap-3">
+                          {log.result === "WIN" ? <Trophy className="w-5 h-5 text-primary" /> : <X className="w-5 h-5 text-muted-foreground" />}
+                          <div>
+                            <p className="font-medium">{log.stakeId}</p>
+                            <p className="text-sm text-muted-foreground">Spin #{log.spinNumber} - {formatAmount(log.wageredAmount)} wagered</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          {log.result === "WIN" && <Badge>{log.prizeLabel}</Badge>}
+                          <span className="text-sm text-muted-foreground">{new Date(log.timestamp).toLocaleTimeString()}</span>
                         </div>
                       </div>
                     ))}
