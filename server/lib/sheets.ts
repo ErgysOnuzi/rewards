@@ -96,15 +96,18 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
   }
 
   const userNameIdx = findColumnIndex(headers, "User_Name");
-  const wageredWeeklyIdx = findColumnIndex(headers, "Wagered_Weekly");
   const wageredMonthlyIdx = findColumnIndex(headers, "Wagered_Monthly");
+  const wageredWeeklyIdx = findColumnIndex(headers, "Wagered_Weekly");
   const wageredOverallIdx = findColumnIndex(headers, "Wagered_Overall");
   
-  console.log(`Found headers at row ${headerRowIdx + 1}: User_Name=${userNameIdx}, Wagered_Weekly=${wageredWeeklyIdx}`);
+  console.log(`Found headers at row ${headerRowIdx + 1}: User_Name=${userNameIdx}, Wagered_Monthly=${wageredMonthlyIdx}`);
   
   // If headers not found, try fallback column positions
   const stakeIdCol = userNameIdx >= 0 ? userNameIdx : 0;
-  const wageredCol = wageredWeeklyIdx >= 0 ? wageredWeeklyIdx : 1;
+  // Prefer monthly, fall back to weekly, then overall
+  const wageredCol = wageredMonthlyIdx >= 0 ? wageredMonthlyIdx : 
+                     wageredWeeklyIdx >= 0 ? wageredWeeklyIdx : 
+                     wageredOverallIdx >= 0 ? wageredOverallIdx : 1;
 
   // Start from the row after headers
   for (let i = headerRowIdx + 1; i < rows.length; i++) {
@@ -117,10 +120,10 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
     // For duplicates, sum the wagered amounts instead of skipping
     const existing = cache.get(normalizedId);
     
-    // Parse wagered amount - use weekly if available, otherwise fall back
+    // Parse wagered amount - use monthly data
     let wageredAmount = 0;
-    if (wageredWeeklyIdx >= 0 && row[wageredWeeklyIdx]) {
-      wageredAmount = parseFloat(String(row[wageredWeeklyIdx]).replace(/,/g, "")) || 0;
+    if (wageredMonthlyIdx >= 0 && row[wageredMonthlyIdx]) {
+      wageredAmount = parseFloat(String(row[wageredMonthlyIdx]).replace(/,/g, "")) || 0;
     } else if (row[wageredCol]) {
       wageredAmount = parseFloat(String(row[wageredCol]).replace(/,/g, "")) || 0;
     }
@@ -135,7 +138,7 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
       cache.set(normalizedId, {
         stakeId: stakeId,
         wageredAmount: wageredAmount,
-        periodLabel: "Weekly",
+        periodLabel: "Monthly",
       });
     }
   }
