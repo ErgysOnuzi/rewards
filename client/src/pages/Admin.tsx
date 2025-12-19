@@ -425,44 +425,46 @@ export default function Admin() {
         </div>
 
         <Tabs defaultValue="status">
-          <TabsList className="flex-wrap">
-            <TabsTrigger value="status" data-testid="tab-status"><Database className="w-4 h-4 mr-1" /> Data Status</TabsTrigger>
-            <TabsTrigger value="lookup" data-testid="tab-lookup"><Search className="w-4 h-4 mr-1" /> User Lookup</TabsTrigger>
-            <TabsTrigger value="flags" data-testid="tab-flags"><Shield className="w-4 h-4 mr-1" /> User Flags</TabsTrigger>
-            <TabsTrigger value="rate" data-testid="tab-rate"><AlertTriangle className="w-4 h-4 mr-1" /> Abuse Monitor</TabsTrigger>
-            <TabsTrigger value="withdrawals" data-testid="tab-withdrawals">
-              <ArrowUpFromLine className="w-4 h-4 mr-1" /> Withdrawals
-              {pendingWithdrawals.length > 0 && <Badge variant="destructive" className="ml-1">{pendingWithdrawals.length}</Badge>}
-            </TabsTrigger>
-            <TabsTrigger value="export" data-testid="tab-export"><Download className="w-4 h-4 mr-1" /> Export</TabsTrigger>
-            <TabsTrigger value="toggles" data-testid="tab-toggles"><Settings className="w-4 h-4 mr-1" /> Toggles</TabsTrigger>
-            <TabsTrigger value="spins" data-testid="tab-spins"><Eye className="w-4 h-4 mr-1" /> Spins Log</TabsTrigger>
-          </TabsList>
+          <div className="overflow-x-auto -mx-4 px-4 pb-2">
+            <TabsList className="inline-flex min-w-max">
+              <TabsTrigger value="status" data-testid="tab-status" className="text-xs sm:text-sm"><Database className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Data</span></TabsTrigger>
+              <TabsTrigger value="lookup" data-testid="tab-lookup" className="text-xs sm:text-sm"><Search className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Lookup</span></TabsTrigger>
+              <TabsTrigger value="flags" data-testid="tab-flags" className="text-xs sm:text-sm"><Shield className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Flags</span></TabsTrigger>
+              <TabsTrigger value="rate" data-testid="tab-rate" className="text-xs sm:text-sm"><AlertTriangle className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Abuse</span></TabsTrigger>
+              <TabsTrigger value="withdrawals" data-testid="tab-withdrawals" className="text-xs sm:text-sm">
+                <ArrowUpFromLine className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Withdrawals</span>
+                {pendingWithdrawals.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingWithdrawals.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="export" data-testid="tab-export" className="text-xs sm:text-sm"><Download className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Export</span></TabsTrigger>
+              <TabsTrigger value="toggles" data-testid="tab-toggles" className="text-xs sm:text-sm"><Settings className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Toggles</span></TabsTrigger>
+              <TabsTrigger value="spins" data-testid="tab-spins" className="text-xs sm:text-sm"><Eye className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Spins</span></TabsTrigger>
+            </TabsList>
+          </div>
 
           <TabsContent value="status" className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
-                <CardTitle>Data Status</CardTitle>
-                <Button onClick={() => refreshCache.mutate()} disabled={refreshCache.isPending} data-testid="button-refresh-cache">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                <CardTitle className="text-lg sm:text-xl">Data Status</CardTitle>
+                <Button onClick={() => refreshCache.mutate()} disabled={refreshCache.isPending} size="sm" data-testid="button-refresh-cache">
                   <RefreshCw className={`w-4 h-4 mr-2 ${refreshCache.isPending ? "animate-spin" : ""}`} />
                   Refresh Cache
                 </Button>
               </CardHeader>
-              <CardContent className="grid md:grid-cols-2 gap-4">
+              <CardContent className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
-                  <p><span className="text-muted-foreground">Sheet ID:</span> {dataStatus?.sheetId}</p>
-                  <p><span className="text-muted-foreground">Tab:</span> {dataStatus?.tabName}</p>
-                  <p><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus?.rowCount ?? 0}</p>
-                  <p><span className="text-muted-foreground">Cache TTL:</span> {dataStatus?.cacheTtlMs ? `${dataStatus.cacheTtlMs / 1000}s` : "N/A"}</p>
+                  <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus?.sheetId}</span></div>
+                  <div><span className="text-muted-foreground">Tab:</span> {dataStatus?.tabName}</div>
+                  <div><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus?.rowCount ?? 0}</div>
+                  <div><span className="text-muted-foreground">Cache TTL:</span> {dataStatus?.cacheTtlMs ? `${dataStatus.cacheTtlMs / 1000}s` : "N/A"}</div>
                 </div>
                 <div className="space-y-2">
-                  <p><span className="text-muted-foreground">Last Fetch:</span> {dataStatus?.lastFetchTime ? formatDate(dataStatus.lastFetchTime) : "Never"}</p>
-                  <p><span className="text-muted-foreground">Cache Age:</span> {dataStatus?.cacheAge ? `${Math.round(dataStatus.cacheAge / 1000)}s` : "N/A"}</p>
-                  <p className="flex items-center gap-2">
+                  <div><span className="text-muted-foreground">Last Fetch:</span> {dataStatus?.lastFetchTime ? formatDate(dataStatus.lastFetchTime) : "Never"}</div>
+                  <div><span className="text-muted-foreground">Cache Age:</span> {dataStatus?.cacheAge ? `${Math.round(dataStatus.cacheAge / 1000)}s` : "N/A"}</div>
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-muted-foreground">Status:</span>
                     <Badge variant={dataStatus?.isExpired ? "destructive" : "default"}>{dataStatus?.isExpired ? "Expired" : "Fresh"}</Badge>
-                  </p>
-                  <p><span className="text-muted-foreground">Duplicates:</span> {dataStatus?.duplicateCount ?? 0}</p>
+                  </div>
+                  <div><span className="text-muted-foreground">Duplicates:</span> {dataStatus?.duplicateCount ?? 0}</div>
                 </div>
                 {dataStatus?.duplicates && dataStatus.duplicates.length > 0 && (
                   <div className="md:col-span-2">
@@ -480,15 +482,16 @@ export default function Admin() {
                 <CardDescription>Search for a Stake ID to view all details</CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
-                <div className="flex gap-2">
+                <div className="flex flex-col sm:flex-row gap-2">
                   <Input 
                     placeholder="Enter Stake ID" 
                     value={lookupId} 
                     onChange={(e) => setLookupId(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && userLookup()}
+                    className="flex-1"
                     data-testid="input-lookup-id"
                   />
-                  <Button onClick={userLookup} data-testid="button-lookup">
+                  <Button onClick={userLookup} className="shrink-0" data-testid="button-lookup">
                     <Search className="w-4 h-4 mr-2" /> Lookup
                   </Button>
                 </div>
@@ -496,26 +499,26 @@ export default function Admin() {
                 {lookupResult && (
                   <div className="space-y-4 pt-4 border-t">
                     {!lookupResult.found ? (
-                      <p className="text-destructive">User not found in sheet data</p>
+                      <div className="text-destructive">User not found in sheet data</div>
                     ) : (
                       <>
-                        <div className="grid md:grid-cols-2 gap-4">
-                          <div>
+                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                          <div className="space-y-1">
                             <h4 className="font-medium mb-2">Sheet Data</h4>
-                            <p><span className="text-muted-foreground">Stake ID:</span> {lookupResult.wagerData?.stakeId}</p>
-                            <p><span className="text-muted-foreground">Wagered:</span> {formatAmount(lookupResult.wagerData?.wageredAmount ?? 0)}</p>
-                            <p><span className="text-muted-foreground">Period:</span> {lookupResult.wagerData?.periodLabel}</p>
-                            <p><span className="text-muted-foreground">Tickets:</span> {lookupResult.computedTickets}</p>
-                            <p><span className="text-muted-foreground">Last Updated:</span> {lookupResult.sheetLastUpdated ? formatDate(lookupResult.sheetLastUpdated) : "N/A"}</p>
+                            <div><span className="text-muted-foreground">Stake ID:</span> {lookupResult.wagerData?.stakeId}</div>
+                            <div><span className="text-muted-foreground">Wagered:</span> {formatAmount(lookupResult.wagerData?.wageredAmount ?? 0)}</div>
+                            <div><span className="text-muted-foreground">Period:</span> {lookupResult.wagerData?.periodLabel}</div>
+                            <div><span className="text-muted-foreground">Tickets:</span> {lookupResult.computedTickets}</div>
+                            <div><span className="text-muted-foreground">Last Updated:</span> {lookupResult.sheetLastUpdated ? formatDate(lookupResult.sheetLastUpdated) : "N/A"}</div>
                           </div>
-                          <div>
+                          <div className="space-y-1">
                             <h4 className="font-medium mb-2">Local Stats</h4>
-                            <p><span className="text-muted-foreground">Spins:</span> {lookupResult.localStats.totalSpins}</p>
-                            <p><span className="text-muted-foreground">Wins:</span> {lookupResult.localStats.wins}</p>
-                            <p><span className="text-muted-foreground">Wallet:</span> {formatAmount(lookupResult.localStats.walletBalance)}</p>
-                            <p><span className="text-muted-foreground">Bronze Spins:</span> {lookupResult.localStats.spinBalances.bronze}</p>
-                            <p><span className="text-muted-foreground">Silver Spins:</span> {lookupResult.localStats.spinBalances.silver}</p>
-                            <p><span className="text-muted-foreground">Gold Spins:</span> {lookupResult.localStats.spinBalances.gold}</p>
+                            <div><span className="text-muted-foreground">Spins:</span> {lookupResult.localStats.totalSpins}</div>
+                            <div><span className="text-muted-foreground">Wins:</span> {lookupResult.localStats.wins}</div>
+                            <div><span className="text-muted-foreground">Wallet:</span> {formatAmount(lookupResult.localStats.walletBalance)}</div>
+                            <div><span className="text-muted-foreground">Bronze:</span> {lookupResult.localStats.spinBalances.bronze}</div>
+                            <div><span className="text-muted-foreground">Silver:</span> {lookupResult.localStats.spinBalances.silver}</div>
+                            <div><span className="text-muted-foreground">Gold:</span> {lookupResult.localStats.spinBalances.gold}</div>
                           </div>
                         </div>
                         {lookupResult.flags && (
@@ -573,15 +576,17 @@ export default function Admin() {
 
                 <div className="space-y-2">
                   {userFlags?.flags.map((flag) => (
-                    <div key={flag.id} className="flex items-center justify-between gap-4 p-3 border rounded-md">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-medium">{flag.stakeId}</span>
-                        {flag.isBlacklisted && <Badge variant="destructive">Blacklisted</Badge>}
-                        {flag.isAllowlisted && <Badge>Allowlisted</Badge>}
-                        {flag.isDisputed && <Badge variant="secondary">Disputed</Badge>}
-                        {flag.notes && <span className="text-sm text-muted-foreground">{flag.notes}</span>}
+                    <div key={flag.id} className="flex items-start sm:items-center justify-between gap-2 p-3 border rounded-md">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium text-sm break-all">{flag.stakeId}</span>
+                          {flag.isBlacklisted && <Badge variant="destructive" className="text-xs">Blacklisted</Badge>}
+                          {flag.isAllowlisted && <Badge className="text-xs">Allowlisted</Badge>}
+                          {flag.isDisputed && <Badge variant="secondary" className="text-xs">Disputed</Badge>}
+                        </div>
+                        {flag.notes && <span className="text-xs text-muted-foreground mt-1 block">{flag.notes}</span>}
                       </div>
-                      <Button variant="ghost" size="icon" onClick={() => deleteFlag.mutate(flag.stakeId)} data-testid={`button-delete-flag-${flag.stakeId}`}>
+                      <Button variant="ghost" size="icon" className="shrink-0" onClick={() => deleteFlag.mutate(flag.stakeId)} data-testid={`button-delete-flag-${flag.stakeId}`}>
                         <X className="w-4 h-4" />
                       </Button>
                     </div>
@@ -653,23 +658,23 @@ export default function Admin() {
                 ) : (
                   <div className="space-y-2">
                     {withdrawalsData?.withdrawals.map((w) => (
-                      <div key={w.id} className={`flex items-center justify-between gap-4 p-3 rounded-md border ${w.status === "pending" ? "border-yellow-500/50 bg-yellow-500/5" : ""}`}>
-                        <div>
-                          <p className="font-medium">{w.stakeId}</p>
-                          <p className="text-sm text-muted-foreground">{formatAmount(w.amount)} - {formatDate(w.createdAt)}</p>
+                      <div key={w.id} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 rounded-md border ${w.status === "pending" ? "border-yellow-500/50 bg-yellow-500/5" : ""}`}>
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm break-all">{w.stakeId}</div>
+                          <div className="text-xs text-muted-foreground">{formatAmount(w.amount)} - {formatDate(w.createdAt)}</div>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           {w.status === "pending" ? (
                             <>
                               <Button size="sm" onClick={() => processWithdrawal.mutate({ id: w.id, status: "approved" })} disabled={processWithdrawal.isPending}>
-                                <Check className="w-4 h-4 mr-1" /> Approve
+                                <Check className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Approve</span>
                               </Button>
                               <Button size="sm" variant="outline" onClick={() => processWithdrawal.mutate({ id: w.id, status: "rejected" })} disabled={processWithdrawal.isPending}>
-                                <Ban className="w-4 h-4 mr-1" /> Reject
+                                <Ban className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline">Reject</span>
                               </Button>
                             </>
                           ) : (
-                            <Badge variant={w.status === "approved" ? "default" : "secondary"}>{w.status}</Badge>
+                            <Badge variant={w.status === "approved" ? "default" : "secondary"} className="text-xs">{w.status}</Badge>
                           )}
                         </div>
                       </div>
@@ -682,12 +687,12 @@ export default function Admin() {
 
           <TabsContent value="export" className="space-y-4">
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4">
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
                 <div>
-                  <CardTitle>Raffle Export</CardTitle>
+                  <CardTitle className="text-lg sm:text-xl">Raffle Export</CardTitle>
                   <CardDescription>Generate ticket entries for raffle</CardDescription>
                 </div>
-                <Button variant="outline" onClick={downloadBackup} data-testid="button-backup">
+                <Button variant="outline" size="sm" onClick={downloadBackup} className="w-full sm:w-auto" data-testid="button-backup">
                   <FileDown className="w-4 h-4 mr-2" /> Backup Data
                 </Button>
               </CardHeader>
@@ -730,21 +735,21 @@ export default function Admin() {
                 </div>
 
                 {exportPreview && (
-                  <div className="p-4 border rounded-md space-y-2">
-                    <h4 className="font-medium">Preview Summary</h4>
-                    <div className="grid md:grid-cols-3 gap-4 text-sm">
-                      <p><span className="text-muted-foreground">Eligible Users:</span> {exportPreview.summary.eligibleUsers}</p>
-                      <p><span className="text-muted-foreground">Total Tickets:</span> {exportPreview.summary.totalTickets}</p>
-                      <p><span className="text-muted-foreground">Total Wager:</span> {formatAmount(exportPreview.summary.totalWager)}</p>
-                      <p><span className="text-muted-foreground">Min Wager:</span> {formatAmount(exportPreview.summary.minWager)}</p>
-                      <p><span className="text-muted-foreground">Max Wager:</span> {formatAmount(exportPreview.summary.maxWager)}</p>
-                      <p><span className="text-muted-foreground">Avg Wager:</span> {formatAmount(exportPreview.summary.avgWager)}</p>
+                  <div className="p-3 sm:p-4 border rounded-md space-y-2">
+                    <h4 className="font-medium text-sm sm:text-base">Preview Summary</h4>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-2 sm:gap-4 text-xs sm:text-sm">
+                      <div><span className="text-muted-foreground">Eligible Users:</span> {exportPreview.summary.eligibleUsers}</div>
+                      <div><span className="text-muted-foreground">Total Tickets:</span> {exportPreview.summary.totalTickets}</div>
+                      <div><span className="text-muted-foreground">Total Wager:</span> {formatAmount(exportPreview.summary.totalWager)}</div>
+                      <div><span className="text-muted-foreground">Min Wager:</span> {formatAmount(exportPreview.summary.minWager)}</div>
+                      <div><span className="text-muted-foreground">Max Wager:</span> {formatAmount(exportPreview.summary.maxWager)}</div>
+                      <div><span className="text-muted-foreground">Avg Wager:</span> {formatAmount(exportPreview.summary.avgWager)}</div>
                     </div>
                     <div>
-                      <h5 className="text-sm font-medium mt-2">Top 10:</h5>
-                      <div className="flex gap-2 flex-wrap mt-1">
+                      <h5 className="text-xs sm:text-sm font-medium mt-2">Top 10:</h5>
+                      <div className="flex gap-1 sm:gap-2 flex-wrap mt-1">
                         {exportPreview.summary.top10.map((e: any) => (
-                          <Badge key={e.stakeId} variant="outline">{e.stakeId}: {e.tickets}</Badge>
+                          <Badge key={e.stakeId} variant="outline" className="text-xs">{e.stakeId}: {e.tickets}</Badge>
                         ))}
                       </div>
                     </div>
@@ -753,16 +758,17 @@ export default function Admin() {
 
                 {exportLogs?.logs && exportLogs.logs.length > 0 && (
                   <div className="pt-4 border-t">
-                    <h4 className="font-medium mb-2">Recent Exports</h4>
+                    <h4 className="font-medium mb-2 text-sm sm:text-base">Recent Exports</h4>
                     <div className="space-y-2">
                       {exportLogs.logs.slice(0, 5).map((log) => (
-                        <div key={log.id} className="flex items-center justify-between text-sm p-2 border rounded-md">
+                        <div key={log.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-2 text-xs sm:text-sm p-2 border rounded-md">
                           <div>
                             <span className="font-medium">{log.campaign}</span> - {log.weekLabel}
                           </div>
-                          <div className="flex items-center gap-2">
-                            <span className="text-muted-foreground">{log.rowCount} entries, {log.totalTickets} tickets</span>
-                            <span className="text-muted-foreground">{formatDate(log.createdAt)}</span>
+                          <div className="flex flex-wrap items-center gap-1 sm:gap-2 text-muted-foreground">
+                            <span>{log.rowCount} entries, {log.totalTickets} tickets</span>
+                            <span className="hidden sm:inline">-</span>
+                            <span>{formatDate(log.createdAt)}</span>
                           </div>
                         </div>
                       ))}
@@ -776,18 +782,18 @@ export default function Admin() {
           <TabsContent value="toggles" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Feature Toggles</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">Feature Toggles</CardTitle>
                 <CardDescription>Runtime configuration settings</CardDescription>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-3">
                   {togglesData?.toggles && Object.entries(togglesData.toggles).map(([key, toggle]) => (
-                    <div key={key} className="flex items-center justify-between gap-4 p-3 border rounded-md">
-                      <div>
-                        <p className="font-medium font-mono">{key}</p>
-                        <p className="text-sm text-muted-foreground">{toggle.description}</p>
+                    <div key={key} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 border rounded-md">
+                      <div className="min-w-0">
+                        <div className="font-medium font-mono text-xs sm:text-sm break-all">{key}</div>
+                        <div className="text-xs sm:text-sm text-muted-foreground">{toggle.description}</div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 shrink-0">
                         {toggle.value === "true" || toggle.value === "false" ? (
                           <Switch 
                             checked={toggle.value === "true"} 
@@ -795,7 +801,7 @@ export default function Admin() {
                           />
                         ) : (
                           <Input 
-                            className="w-24" 
+                            className="w-20 sm:w-24 text-sm" 
                             value={toggle.value} 
                             onChange={(e) => updateToggle.mutate({ key, value: e.target.value })}
                           />
@@ -811,25 +817,25 @@ export default function Admin() {
           <TabsContent value="spins" className="space-y-4">
             <Card>
               <CardHeader>
-                <CardTitle>Recent Spins</CardTitle>
+                <CardTitle className="text-lg sm:text-xl">Recent Spins</CardTitle>
               </CardHeader>
               <CardContent>
                 {logsData?.logs.length === 0 ? (
-                  <p className="text-center text-muted-foreground py-8">No spins yet</p>
+                  <div className="text-center text-muted-foreground py-8">No spins yet</div>
                 ) : (
                   <div className="space-y-2">
                     {logsData?.logs.map((log, i) => (
-                      <div key={`${log.timestamp}-${i}`} className={`flex items-center justify-between gap-4 p-3 rounded-md ${log.result === "WIN" ? "bg-primary/10" : "bg-muted/50"}`}>
-                        <div className="flex items-center gap-3">
-                          {log.result === "WIN" ? <Trophy className="w-5 h-5 text-primary" /> : <X className="w-5 h-5 text-muted-foreground" />}
-                          <div>
-                            <p className="font-medium">{log.stakeId}</p>
-                            <p className="text-sm text-muted-foreground">Spin #{log.spinNumber} - {formatAmount(log.wageredAmount)} wagered</p>
+                      <div key={`${log.timestamp}-${i}`} className={`flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 rounded-md ${log.result === "WIN" ? "bg-primary/10" : "bg-muted/50"}`}>
+                        <div className="flex items-center gap-2 sm:gap-3">
+                          {log.result === "WIN" ? <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" /> : <X className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" />}
+                          <div className="min-w-0">
+                            <div className="font-medium text-sm break-all">{log.stakeId}</div>
+                            <div className="text-xs text-muted-foreground">Spin #{log.spinNumber} - {formatAmount(log.wageredAmount)} wagered</div>
                           </div>
                         </div>
-                        <div className="flex items-center gap-2">
-                          {log.result === "WIN" && <Badge>{log.prizeLabel}</Badge>}
-                          <span className="text-sm text-muted-foreground">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        <div className="flex items-center gap-2 shrink-0 ml-6 sm:ml-0">
+                          {log.result === "WIN" && <Badge className="text-xs">{log.prizeLabel}</Badge>}
+                          <span className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleTimeString()}</span>
                         </div>
                       </div>
                     ))}
