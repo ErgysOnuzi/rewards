@@ -169,11 +169,27 @@ export function calculateTickets(wageredAmount: number): number {
   return Math.floor(wageredAmount / 1000);
 }
 
-import { TIER_CONFIG, type SpinTier } from "@shared/schema";
+import { TIER_CONFIG, type SpinTier, type PrizeOption } from "@shared/schema";
 
-export function determineSpinResult(tier: SpinTier = "bronze"): "WIN" | "LOSE" {
-  const winProbability = TIER_CONFIG[tier].winProbability;
-  return Math.random() < winProbability ? "WIN" : "LOSE";
+export interface SpinResult {
+  outcome: "WIN" | "LOSE";
+  prize: PrizeOption | null;
+}
+
+export function determineSpinResult(tier: SpinTier = "bronze"): SpinResult {
+  const tierConfig = TIER_CONFIG[tier];
+  const roll = Math.random();
+  
+  // Check each prize in order (highest value last, so we check from common to rare)
+  let cumulativeProbability = 0;
+  for (const prize of tierConfig.prizes) {
+    cumulativeProbability += prize.probability;
+    if (roll < cumulativeProbability) {
+      return { outcome: "WIN", prize };
+    }
+  }
+  
+  return { outcome: "LOSE", prize: null };
 }
 
 export function getCacheStatus(): {

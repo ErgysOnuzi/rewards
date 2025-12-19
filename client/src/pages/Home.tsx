@@ -3,6 +3,7 @@ import HeroSection from "@/components/HeroSection";
 import StakeIdForm from "@/components/StakeIdForm";
 import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatus";
 import SpinWheel, { SpinResult, BonusStatus } from "@/components/SpinWheel";
+import PrizeTiers from "@/components/PrizeTiers";
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 
@@ -289,16 +290,19 @@ export default function Home() {
                 onWithdraw={handleWithdraw}
               />
               
-              <SpinWheel
-                ticketsRemaining={ticketData.ticketsRemaining}
-                stakeId={ticketData.stakeId}
-                onSpin={handleSpin}
-                onBonusSpin={handleBonusSpin}
-                onSpinComplete={handleSpinComplete}
-                onSpinError={handleSpinError}
-                bonusStatus={bonusStatus || undefined}
-                onBonusUsed={handleBonusUsed}
-              />
+              <div className="grid md:grid-cols-2 gap-6">
+                <SpinWheel
+                  ticketsRemaining={ticketData.ticketsRemaining}
+                  stakeId={ticketData.stakeId}
+                  onSpin={handleSpin}
+                  onBonusSpin={handleBonusSpin}
+                  onSpinComplete={handleSpinComplete}
+                  onSpinError={handleSpinError}
+                  bonusStatus={bonusStatus || undefined}
+                  onBonusUsed={handleBonusUsed}
+                />
+                <PrizeTiers selectedTier="bronze" />
+              </div>
             </div>
           )}
         </div>

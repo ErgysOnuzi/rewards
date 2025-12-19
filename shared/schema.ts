@@ -5,17 +5,55 @@ import { createInsertSchema } from "drizzle-zod";
 // Spin tier types
 export type SpinTier = "bronze" | "silver" | "gold";
 
-// Tier configuration (prize values, costs, and win probability)
-// Math: $100k wagered = 100 bronze = 50 silver = 10 gold
-// Expected payout is equal across tiers (house never loses on tier upgrades)
-// 100 bronze × 1% × $5 = $5
-// 50 silver × 0.4% × $25 = $5
-// 10 gold × 0.5% × $100 = $5
+// Prize definition with value and probability
+export interface PrizeOption {
+  value: number;       // Dollar value of the prize
+  probability: number; // Probability of winning this prize (0-1)
+  label: string;       // Display label
+}
+
+// Tier configuration with multiple prize options per tier
+// Each tier has different prize levels with varying odds
+// Total win probability is the sum of all prize probabilities
 export const TIER_CONFIG = {
-  bronze: { prizeValue: 5, cost: 5, winProbability: 0.01 },      // 1% win rate
-  silver: { prizeValue: 25, cost: 25, winProbability: 0.004 },   // 0.4% win rate
-  gold: { prizeValue: 100, cost: 100, winProbability: 0.005 },   // 0.5% win rate
+  bronze: {
+    cost: 5,
+    prizes: [
+      { value: 5, probability: 0.008, label: "$5 Prize" },      // 0.8% chance
+      { value: 10, probability: 0.0015, label: "$10 Prize" },   // 0.15% chance
+      { value: 25, probability: 0.0005, label: "$25 Prize" },   // 0.05% chance
+    ] as PrizeOption[],
+    // Total win rate: 1% (0.8% + 0.15% + 0.05%)
+  },
+  silver: {
+    cost: 25,
+    prizes: [
+      { value: 25, probability: 0.003, label: "$25 Prize" },    // 0.3% chance
+      { value: 50, probability: 0.0008, label: "$50 Prize" },   // 0.08% chance
+      { value: 100, probability: 0.0002, label: "$100 Prize" }, // 0.02% chance
+    ] as PrizeOption[],
+    // Total win rate: 0.4%
+  },
+  gold: {
+    cost: 100,
+    prizes: [
+      { value: 100, probability: 0.003, label: "$100 Prize" },   // 0.3% chance
+      { value: 250, probability: 0.0015, label: "$250 Prize" },  // 0.15% chance
+      { value: 500, probability: 0.0005, label: "$500 Prize" },  // 0.05% chance
+    ] as PrizeOption[],
+    // Total win rate: 0.5%
+  },
 } as const;
+
+// Helper to get total win probability for a tier
+export function getTierWinProbability(tier: SpinTier): number {
+  return TIER_CONFIG[tier].prizes.reduce((sum, p) => sum + p.probability, 0);
+}
+
+// Legacy compatibility - get the minimum prize value for a tier
+export function getTierMinPrize(tier: SpinTier): number {
+  return TIER_CONFIG[tier].prizes[0]?.value || 0;
+}
 
 // Conversion rates: 2 bronze = 1 silver, 5 silver = 1 gold
 // This gives: 100 bronze = 50 silver = 10 gold

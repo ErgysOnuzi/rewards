@@ -193,10 +193,9 @@ export async function registerRoutes(
         ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
       }
 
-      const result = determineSpinResult(tier);
-      const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
-      const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
-      const prizeValue = result === "WIN" ? tierPrizeValue : 0;
+      const spinResult = determineSpinResult(tier);
+      const prizeLabel = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.label : "";
+      const prizeValue = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.value : 0;
 
       // Log spin to database (only for free ticket spins)
       if (!usePurchasedSpin) {
@@ -204,7 +203,7 @@ export async function registerRoutes(
           stakeId: wagerRow.stakeId,
           wageredAmount: wagerRow.wageredAmount,
           spinNumber,
-          result,
+          result: spinResult.outcome,
           prizeLabel,
           prizeValue,
           ipHash,
@@ -213,7 +212,7 @@ export async function registerRoutes(
 
       // Add winnings to wallet if won
       let walletBalance = await getWalletBalance(stakeId);
-      if (result === "WIN") {
+      if (spinResult.outcome === "WIN" && prizeValue > 0) {
         walletBalance = await updateWalletBalance(stakeId, prizeValue);
         await db.insert(walletTransactions).values({
           stakeId,
@@ -233,7 +232,7 @@ export async function registerRoutes(
         tickets_used_before: ticketsUsedBefore,
         tickets_used_after: ticketsUsedAfter,
         tickets_remaining_after: ticketsRemainingAfter,
-        result,
+        result: spinResult.outcome,
         prize_label: prizeLabel,
         prize_value: prizeValue,
         tier,
@@ -302,9 +301,9 @@ export async function registerRoutes(
       }
 
       // Determine result using same house-favored odds as bronze tier
-      const result = determineSpinResult("bronze");
-      const prizeValue = result === "WIN" ? TIER_CONFIG.bronze.prizeValue : 0;
-      const prizeLabel = result === "WIN" ? `$${prizeValue} Bonus Win` : "No prize";
+      const spinResult = determineSpinResult("bronze");
+      const prizeValue = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.value : 0;
+      const prizeLabel = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.label : "No prize";
 
       // Update last bonus spin time
       await db.update(userState).set({ 
@@ -321,7 +320,7 @@ export async function registerRoutes(
         stakeId,
         wageredAmount: wagerRow.wageredAmount,
         spinNumber,
-        result,
+        result: spinResult.outcome,
         prizeLabel: `[BONUS] ${prizeLabel}`,
         prizeValue,
         ipHash,
@@ -329,7 +328,7 @@ export async function registerRoutes(
 
       // Add winnings to wallet if won
       let walletBalance = await getWalletBalance(stakeId);
-      if (result === "WIN") {
+      if (spinResult.outcome === "WIN" && prizeValue > 0) {
         walletBalance = await updateWalletBalance(stakeId, prizeValue);
         await db.insert(walletTransactions).values({
           stakeId,
@@ -341,7 +340,7 @@ export async function registerRoutes(
 
       return res.json({
         stake_id: stakeId,
-        result,
+        result: spinResult.outcome,
         prize_label: prizeLabel,
         prize_value: prizeValue,
         wallet_balance: walletBalance,
