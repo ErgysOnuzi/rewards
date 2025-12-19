@@ -89,11 +89,32 @@ shared/               # Shared code between client/server
 ## Database Schema
 
 ### Tables
-- **spin_logs**: Audit trail of all free ticket spins (legacy, may be migrated to Sheets)
+- **spin_logs**: Audit trail of all free ticket spins
 - **user_wallets**: User wallet balances (winnings)
 - **user_spin_balances**: Per-tier spin balances for each user
 - **withdrawal_requests**: Pending/processed withdrawal requests
 - **wallet_transactions**: Audit trail of all wallet transactions
+- **user_flags**: Blacklist/allowlist/disputed user flags
+- **admin_sessions**: Admin authentication sessions
+- **export_logs**: Audit trail of raffle exports
+- **feature_toggles**: Runtime configuration settings
+- **payouts**: Track paid-out winnings
+- **rate_limit_logs**: Rate limit violations for abuse detection
+
+## Admin Control Panel
+
+### Access
+Navigate to `/admin` and enter the ADMIN_PASSWORD to access the control panel.
+
+### Features
+1. **Data Status**: Monitor Google Sheets cache status, row counts, duplicates, refresh cache manually
+2. **User Lookup**: Search for any Stake ID to view wager data, local stats, wallet, spin balances, flags, and transaction history
+3. **User Flags**: Blacklist/allowlist/dispute users with notes - affects raffle eligibility
+4. **Abuse Monitor**: View top spinners per hour, detect IP anomalies (same IP using multiple Stake IDs)
+5. **Withdrawals**: Approve/reject withdrawal requests from users
+6. **Export**: Generate raffle CSVs with campaign/week labels, preview summaries, view export history
+7. **Toggles**: Runtime feature toggles for win rates, enable/disable spins globally
+8. **Spins Log**: Real-time view of recent spin activity
 
 ## External Dependencies
 
@@ -108,6 +129,7 @@ shared/               # Shared code between client/server
 - `GOOGLE_SHEETS_ID` - The spreadsheet ID to read/write
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Service account email for auth
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - Private key (newlines as `\n`)
+- `ADMIN_PASSWORD` - Password for admin panel access
 
 ### Optional Environment Variables
 - `WAGER_SHEET_NAME` - Tab name for wager data (default: "WAGER_DATA")
