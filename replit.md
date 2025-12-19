@@ -89,9 +89,7 @@ shared/               # Shared code between client/server
 ## Database Schema
 
 ### Tables
-- **demo_users**: Demo user accounts with stake_id, wagered_amount, period_label
-- **spin_logs**: Audit trail of all free ticket spins
-- **guaranteed_wins**: Demo mode: guaranteed wins at specific spin numbers
+- **spin_logs**: Audit trail of all free ticket spins (legacy, may be migrated to Sheets)
 - **user_wallets**: User wallet balances (winnings)
 - **user_spin_balances**: Per-tier spin balances for each user
 - **withdrawal_requests**: Pending/processed withdrawal requests
@@ -99,20 +97,19 @@ shared/               # Shared code between client/server
 
 ## External Dependencies
 
-### Google Sheets Integration (Optional)
-- **Purpose**: Primary data store for wager data and spin logs (production mode)
+### Google Sheets Integration (Required)
+- **Purpose**: Primary data store for wager data and spin logs
 - **Library**: `googleapis` package with Sheets API v4
 - **Authentication**: Service account credentials via environment variables
-- **Demo Mode**: Works without Google Sheets using PostgreSQL database
 
 ### Required Environment Variables
-- `DATABASE_URL` - PostgreSQL connection (required for all modes)
+- `DATABASE_URL` - PostgreSQL connection
 - `SESSION_SECRET` - Session encryption key
-
-### Optional Environment Variables (Google Sheets Mode)
 - `GOOGLE_SHEETS_ID` - The spreadsheet ID to read/write
 - `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Service account email for auth
 - `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - Private key (newlines as `\n`)
+
+### Optional Environment Variables
 - `WAGER_SHEET_NAME` - Tab name for wager data (default: "WAGER_DATA")
 - `SPIN_LOG_SHEET_NAME` - Tab name for spin logs (default: "SPIN_LOG")
 
@@ -120,9 +117,3 @@ shared/               # Shared code between client/server
 - `WIN_PROBABILITY` - Decimal win chance (default: 0.01 = 1%)
 - `PRIZE_VALUE` - Base prize value in dollars (default: 5)
 - `RATE_LIMIT_PER_IP_PER_HOUR` - Request limit per IP (default: 30)
-
-### Demo Users
-In demo mode (no Google Sheets), the following users are seeded:
-- **ergys**: $1,000,000 wagered (1000 free bronze spins), wins on 2nd spin
-- **luke**: $20,000 wagered, wins on 13th spin
-- **demo**: $5,000 wagered, random wins based on probability

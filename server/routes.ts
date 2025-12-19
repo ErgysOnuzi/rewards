@@ -4,7 +4,7 @@ import { randomUUID } from "crypto";
 import { 
   lookupRequestSchema, spinRequestSchema, convertSpinsRequestSchema, 
   purchaseSpinsRequestSchema, withdrawRequestSchema, processWithdrawalSchema,
-  demoUsers, spinLogs, guaranteedWins, userWallets, userSpinBalances, 
+  spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
   TIER_CONFIG, CONVERSION_RATES, type SpinTier, type SpinBalances
 } from "@shared/schema";
@@ -15,47 +15,11 @@ import type {
 import { getWagerRow, countSpinsForStakeId, appendSpinLogRow, calculateTickets, determineSpinResult } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited } from "./lib/rateLimit";
-import { config, validateConfig } from "./lib/config";
+import { config } from "./lib/config";
 import { ZodError } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, and } from "drizzle-orm";
 
-function isDemoMode(): boolean {
-  const errors = validateConfig();
-  return errors.length > 0;
-}
-
-// Seed default demo users if they don't exist
-async function seedDemoData() {
-  const defaultUsers = [
-    { stakeId: "ergys", wageredAmount: 1000000, periodLabel: "December 2024" },
-    { stakeId: "demo", wageredAmount: 5000, periodLabel: "December 2024" },
-    { stakeId: "luke", wageredAmount: 20000, periodLabel: "December 2024" },
-  ];
-  
-  const defaultWins = [
-    { stakeId: "luke", spinNumber: 13 },
-    { stakeId: "ergys", spinNumber: 2 },
-  ];
-
-  for (const user of defaultUsers) {
-    const existing = await db.select().from(demoUsers).where(eq(demoUsers.stakeId, user.stakeId));
-    if (existing.length === 0) {
-      await db.insert(demoUsers).values(user);
-    }
-  }
-
-  for (const win of defaultWins) {
-    const existing = await db.select().from(guaranteedWins)
-      .where(eq(guaranteedWins.stakeId, win.stakeId));
-    if (!existing.some(w => w.spinNumber === win.spinNumber)) {
-      await db.insert(guaranteedWins).values(win);
-    }
-  }
-}
-
-// Initialize on startup
-seedDemoData().catch(console.error);
 
 // Helper functions for wallet and spin balances
 async function getWalletBalance(stakeId: string): Promise<number> {
@@ -129,38 +93,9 @@ export async function registerRoutes(
       const parsed = lookupRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
 
-      // Demo mode when Google Sheets isn't configured
-      if (isDemoMode()) {
-        const [demoUser] = await db.select().from(demoUsers).where(eq(demoUsers.stakeId, stakeId));
-        if (!demoUser) {
-          return res.status(404).json({ message: "Stake ID not found. Try 'ergys', 'demo', or 'luke'." } as ErrorResponse);
-        }
-        const ticketsTotal = calculateTickets(demoUser.wageredAmount);
-        const spinCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
-        const ticketsUsed = Number(spinCount[0]?.count || 0);
-        const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
-        
-        const walletBalance = await getWalletBalance(stakeId);
-        const spinBalances = await getSpinBalances(stakeId);
-        const pendingWithdrawals = await getPendingWithdrawals(stakeId);
-
-        const response: LookupResponse = {
-          stake_id: stakeId,
-          period_label: demoUser.periodLabel,
-          wagered_amount: demoUser.wageredAmount,
-          tickets_total: ticketsTotal,
-          tickets_used: ticketsUsed,
-          tickets_remaining: ticketsRemaining,
-          wallet_balance: walletBalance,
-          spin_balances: spinBalances,
-          pending_withdrawals: pendingWithdrawals,
-        };
-        return res.json(response);
-      }
-
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
-        return res.status(404).json({ message: "Stake ID not found in wager sheet." } as ErrorResponse);
+        return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
       const ticketsTotal = calculateTickets(wagerRow.wageredAmount);
@@ -206,142 +141,69 @@ export async function registerRoutes(
       const stakeId = parsed.stake_id.toLowerCase();
       const tier: SpinTier = parsed.tier || "bronze";
 
-      // Demo mode when Google Sheets isn't configured
-      if (isDemoMode()) {
-        const [demoUser] = await db.select().from(demoUsers).where(eq(demoUsers.stakeId, stakeId));
-        if (!demoUser) {
-          return res.status(404).json({ message: "Stake ID not found. Try 'ergys', 'demo', or 'luke'." } as ErrorResponse);
-        }
-
-        // Check if user has purchased tier spins first
-        const currentSpinBalances = await getSpinBalances(stakeId);
-        const hasTierSpin = currentSpinBalances[tier] > 0;
-
-        // For free spins (bronze only, from wager tickets)
-        const ticketsTotal = calculateTickets(demoUser.wageredAmount);
-        const spinCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
-        const ticketsUsedBefore = Number(spinCount[0]?.count || 0);
-        const freeTicketsRemaining = ticketsTotal - ticketsUsedBefore;
-
-        // Determine spin source
-        let usePurchasedSpin = hasTierSpin;
-        let useFreeTicket = !hasTierSpin && tier === "bronze" && freeTicketsRemaining > 0;
-
-        if (!usePurchasedSpin && !useFreeTicket) {
-          if (tier !== "bronze") {
-            return res.status(403).json({ message: `No ${tier} spins available. Purchase or convert spins first.` } as ErrorResponse);
-          }
-          return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
-        }
-
-        // Consume the spin
-        let spinNumber = ticketsUsedBefore + 1;
-        let ticketsUsedAfter = ticketsUsedBefore;
-        let ticketsRemainingAfter = freeTicketsRemaining;
-
-        if (usePurchasedSpin) {
-          // Deduct from purchased spin balance
-          await updateSpinBalance(stakeId, tier, -1);
-        } else {
-          // Use free ticket
-          ticketsUsedAfter = ticketsUsedBefore + 1;
-          ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
-        }
-
-        // Check for guaranteed win
-        // Ergys wins every time EXCEPT every 6th spin (loses on 6, 12, 18, etc.)
-        const isErgysGuaranteedWin = stakeId === "ergys" && spinNumber % 6 !== 0;
-        const isErgysGuaranteedLose = stakeId === "ergys" && spinNumber % 6 === 0;
-        const userGuaranteedWins = await db.select().from(guaranteedWins).where(eq(guaranteedWins.stakeId, stakeId));
-        const isGuaranteedWin = isErgysGuaranteedWin || (!usePurchasedSpin && userGuaranteedWins.some(w => w.spinNumber === spinNumber));
-        
-        const result = isErgysGuaranteedLose ? "LOSE" : (isGuaranteedWin ? "WIN" : determineSpinResult(tier));
-        const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
-        const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
-        const prizeValue = result === "WIN" ? tierPrizeValue : 0;
-
-        // Log spin to database (only for free ticket spins)
-        if (!usePurchasedSpin) {
-          await db.insert(spinLogs).values({
-            stakeId,
-            wageredAmount: demoUser.wageredAmount,
-            spinNumber,
-            result,
-            prizeLabel,
-            prizeValue,
-            ipHash,
-          });
-        }
-
-        // Add winnings to wallet if won
-        let walletBalance = await getWalletBalance(stakeId);
-        if (result === "WIN") {
-          walletBalance = await updateWalletBalance(stakeId, prizeValue);
-          await db.insert(walletTransactions).values({
-            stakeId,
-            type: "win",
-            amount: prizeValue,
-            tier,
-            description: `Won ${tier} spin: ${prizeLabel}`,
-          });
-        }
-
-        const spinBalances = await getSpinBalances(stakeId);
-
-        const response: SpinResponse = {
-          stake_id: stakeId,
-          wagered_amount: demoUser.wageredAmount,
-          tickets_total: ticketsTotal,
-          tickets_used_before: ticketsUsedBefore,
-          tickets_used_after: ticketsUsedAfter,
-          tickets_remaining_after: ticketsRemainingAfter,
-          result,
-          prize_label: prizeLabel,
-          prize_value: prizeValue,
-          tier,
-          wallet_balance: walletBalance,
-          spin_balances: spinBalances,
-        };
-        return res.json(response);
-      }
-
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
-        return res.status(404).json({ message: "Stake ID not found in wager sheet." } as ErrorResponse);
+        return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
+      // Check if user has purchased tier spins first
+      const currentSpinBalances = await getSpinBalances(stakeId);
+      const hasTierSpin = currentSpinBalances[tier] > 0;
+
+      // For free spins (bronze only, from wager tickets)
       const ticketsTotal = calculateTickets(wagerRow.wageredAmount);
       const ticketsUsedBefore = await countSpinsForStakeId(stakeId);
-      const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
+      const freeTicketsRemaining = ticketsTotal - ticketsUsedBefore;
 
-      if (ticketsRemaining <= 0) {
+      // Determine spin source
+      let usePurchasedSpin = hasTierSpin;
+      let useFreeTicket = !hasTierSpin && tier === "bronze" && freeTicketsRemaining > 0;
+
+      if (!usePurchasedSpin && !useFreeTicket) {
+        if (tier !== "bronze") {
+          return res.status(403).json({ message: `No ${tier} spins available. Purchase or convert spins first.` } as ErrorResponse);
+        }
         return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
+      }
+
+      // Consume the spin
+      let spinNumber = ticketsUsedBefore + 1;
+      let ticketsUsedAfter = ticketsUsedBefore;
+      let ticketsRemainingAfter = freeTicketsRemaining;
+
+      if (usePurchasedSpin) {
+        // Deduct from purchased spin balance
+        await updateSpinBalance(stakeId, tier, -1);
+      } else {
+        // Use free ticket - will be logged to sheets
+        ticketsUsedAfter = ticketsUsedBefore + 1;
+        ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
       }
 
       const result = determineSpinResult(tier);
       const tierPrizeValue = TIER_CONFIG[tier].prizeValue;
       const prizeLabel = result === "WIN" ? `$${tierPrizeValue} Stake Tip` : "";
       const prizeValue = result === "WIN" ? tierPrizeValue : 0;
-      const ticketsUsedAfter = ticketsUsedBefore + 1;
-      const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
-      const logRow: SpinLogRow = {
-        timestampIso: new Date().toISOString(),
-        stakeId: wagerRow.stakeId,
-        wageredAmount: wagerRow.wageredAmount,
-        ticketsTotal,
-        ticketsUsedBefore,
-        ticketsUsedAfter,
-        ticketsRemainingAfter,
-        result,
-        winProbability: config.winProbability,
-        prizeLabel,
-        requestId: randomUUID(),
-        ipHash,
-        userAgent: req.headers["user-agent"] || "unknown",
-      };
-
-      await appendSpinLogRow(logRow);
+      // Log spin to Google Sheets (only for free ticket spins)
+      if (!usePurchasedSpin) {
+        const logRow: SpinLogRow = {
+          timestampIso: new Date().toISOString(),
+          stakeId: wagerRow.stakeId,
+          wageredAmount: wagerRow.wageredAmount,
+          ticketsTotal,
+          ticketsUsedBefore,
+          ticketsUsedAfter,
+          ticketsRemainingAfter,
+          result,
+          winProbability: config.winProbability,
+          prizeLabel,
+          requestId: randomUUID(),
+          ipHash,
+          userAgent: req.headers["user-agent"] || "unknown",
+        };
+        await appendSpinLogRow(logRow);
+      }
 
       // Add winnings to wallet if won
       let walletBalance = await getWalletBalance(stakeId);
@@ -385,7 +247,7 @@ export async function registerRoutes(
 
   app.get("/api/admin/logs", async (_req: Request, res: Response) => {
     try {
-      // Get logs from database (works in both demo and sheets mode)
+      // Get logs from Google Sheets via countSpinsForStakeId
       const logs = await db.select().from(spinLogs).orderBy(desc(spinLogs.timestamp)).limit(100);
       const totalCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs);
       const winCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.result, "WIN"));
@@ -400,7 +262,6 @@ export async function registerRoutes(
       }));
 
       return res.json({
-        mode: isDemoMode() ? "demo" : "sheets",
         logs: formattedLogs,
         totalSpins: Number(totalCount[0]?.count || 0),
         totalWins: Number(winCount[0]?.count || 0),
@@ -614,14 +475,6 @@ export async function registerRoutes(
   });
 
   app.get("/api/config", (_req: Request, res: Response) => {
-    const configErrors = validateConfig();
-    if (configErrors.length > 0) {
-      return res.status(500).json({
-        configured: false,
-        errors: configErrors,
-        message: "Please configure the required environment variables in Replit Secrets.",
-      });
-    }
     return res.json({
       configured: true,
       siteName: config.siteName,
