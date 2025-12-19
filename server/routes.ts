@@ -5,7 +5,7 @@ import {
   purchaseSpinsRequestSchema, withdrawRequestSchema, processWithdrawalSchema,
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
-  userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs,
+  userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState,
   TIER_CONFIG, CONVERSION_RATES, type SpinTier, type SpinBalances
 } from "@shared/schema";
 import type { 
@@ -243,6 +243,138 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
       }
       console.error("Spin error:", err);
+      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
+    }
+  });
+
+  // Daily bonus spin endpoint (one free spin per 24 hours)
+  app.post("/api/spin/bonus", async (req: Request, res: Response) => {
+    try {
+      const parsed = lookupRequestSchema.parse(req.body);
+      const stakeId = parsed.stake_id.toLowerCase();
+      const ipHash = hashIp(req.ip || "unknown");
+
+      // Check if user exists in sheet
+      const wagerRow = await getWagerRow(stakeId);
+      if (!wagerRow) {
+        return res.status(404).json({ message: "Stake ID not found in wagering data" } as ErrorResponse);
+      }
+
+      // Get or create user state
+      let [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
+      
+      if (!state) {
+        await db.insert(userState).values({ stakeId });
+        [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
+      }
+
+      // Check cooldown (24 hours)
+      const now = new Date();
+      const cooldownMs = 24 * 60 * 60 * 1000; // 24 hours
+      
+      if (state.lastBonusSpinAt) {
+        const timeSince = now.getTime() - state.lastBonusSpinAt.getTime();
+        if (timeSince < cooldownMs) {
+          const remainingMs = cooldownMs - timeSince;
+          const remainingHours = Math.ceil(remainingMs / (60 * 60 * 1000));
+          
+          // Log denied bonus attempt
+          await db.insert(rateLimitLogs).values({
+            ipHash,
+            stakeId,
+            action: "bonus_denied",
+          });
+          
+          return res.status(429).json({ 
+            message: `Daily bonus already claimed. Try again in ${remainingHours} hours.`,
+            remaining_ms: remainingMs,
+            next_bonus_at: new Date(state.lastBonusSpinAt.getTime() + cooldownMs).toISOString(),
+          } as ErrorResponse);
+        }
+      }
+
+      // Determine result using same house-favored odds as bronze tier
+      const result = determineSpinResult("bronze");
+      const prizeValue = result === "WIN" ? TIER_CONFIG.bronze.prizeValue : 0;
+      const prizeLabel = result === "WIN" ? `$${prizeValue} Bonus Win` : "No prize";
+
+      // Update last bonus spin time
+      await db.update(userState).set({ 
+        lastBonusSpinAt: now,
+        updatedAt: now,
+      }).where(eq(userState.stakeId, stakeId));
+
+      // Log the bonus spin
+      const spinsForUser = await db.select({ count: sql<number>`count(*)` })
+        .from(spinLogs).where(eq(spinLogs.stakeId, stakeId));
+      const spinNumber = Number(spinsForUser[0]?.count || 0) + 1;
+
+      await db.insert(spinLogs).values({
+        stakeId,
+        wageredAmount: wagerRow.wageredAmount,
+        spinNumber,
+        result,
+        prizeLabel: `[BONUS] ${prizeLabel}`,
+        prizeValue,
+        ipHash,
+      });
+
+      // Add winnings to wallet if won
+      let walletBalance = await getWalletBalance(stakeId);
+      if (result === "WIN") {
+        walletBalance = await updateWalletBalance(stakeId, prizeValue);
+        await db.insert(walletTransactions).values({
+          stakeId,
+          type: "win",
+          amount: prizeValue,
+          description: `Daily bonus win: ${prizeLabel}`,
+        });
+      }
+
+      return res.json({
+        stake_id: stakeId,
+        result,
+        prize_label: prizeLabel,
+        prize_value: prizeValue,
+        wallet_balance: walletBalance,
+        is_bonus: true,
+        next_bonus_at: new Date(now.getTime() + cooldownMs).toISOString(),
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
+      }
+      console.error("Bonus spin error:", err);
+      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
+    }
+  });
+
+  // Check bonus spin availability
+  app.post("/api/spin/bonus/check", async (req: Request, res: Response) => {
+    try {
+      const parsed = lookupRequestSchema.parse(req.body);
+      const stakeId = parsed.stake_id.toLowerCase();
+
+      const [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
+      
+      const cooldownMs = 24 * 60 * 60 * 1000;
+      const now = new Date();
+      
+      if (!state || !state.lastBonusSpinAt) {
+        return res.json({ available: true, remaining_ms: 0 });
+      }
+
+      const timeSince = now.getTime() - state.lastBonusSpinAt.getTime();
+      const available = timeSince >= cooldownMs;
+      const remainingMs = available ? 0 : cooldownMs - timeSince;
+
+      return res.json({
+        available,
+        remaining_ms: remainingMs,
+        next_bonus_at: available ? null : new Date(state.lastBonusSpinAt.getTime() + cooldownMs).toISOString(),
+      });
+    } catch (err) {
+      console.error("Bonus check error:", err);
       return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
     }
   });

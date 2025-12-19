@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import HeroSection from "@/components/HeroSection";
 import StakeIdForm from "@/components/StakeIdForm";
 import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatus";
-import SpinWheel, { SpinResult } from "@/components/SpinWheel";
+import SpinWheel, { SpinResult, BonusStatus } from "@/components/SpinWheel";
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 
@@ -10,7 +10,26 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
+  const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
   const { toast } = useToast();
+
+  const checkBonusStatus = async (stakeId: string) => {
+    try {
+      const response = await fetch("/api/spin/bonus/check", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ stake_id: stakeId }),
+      });
+      const data = await response.json();
+      setBonusStatus({
+        available: data.available,
+        remainingMs: data.remaining_ms,
+        nextBonusAt: data.next_bonus_at,
+      });
+    } catch (err) {
+      console.error("Failed to check bonus status:", err);
+    }
+  };
 
   const handleLookup = async (stakeId: string) => {
     setIsLoading(true);
@@ -40,6 +59,8 @@ export default function Home() {
         spinBalances: data.spin_balances || { bronze: 0, silver: 0, gold: 0 },
         pendingWithdrawals: data.pending_withdrawals || 0,
       });
+
+      await checkBonusStatus(stakeId);
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
@@ -177,6 +198,41 @@ export default function Home() {
     }
   };
 
+  const handleBonusSpin = async () => {
+    if (!ticketData) throw new Error("No ticket data");
+
+    const response = await fetch("/api/spin/bonus", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stake_id: ticketData.stakeId }),
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.message || "Bonus spin failed");
+    }
+
+    if (data.result === "WIN") {
+      setTicketData({
+        ...ticketData,
+        walletBalance: data.wallet_balance,
+      });
+      toast({
+        title: "Bonus Win!",
+        description: data.prize_label,
+      });
+    }
+
+    return data;
+  };
+
+  const handleBonusUsed = () => {
+    if (ticketData) {
+      checkBonusStatus(ticketData.stakeId);
+    }
+  };
+
   const handleWithdraw = async (amount: number) => {
     if (!ticketData) return;
 
@@ -235,9 +291,13 @@ export default function Home() {
               
               <SpinWheel
                 ticketsRemaining={ticketData.ticketsRemaining}
+                stakeId={ticketData.stakeId}
                 onSpin={handleSpin}
+                onBonusSpin={handleBonusSpin}
                 onSpinComplete={handleSpinComplete}
                 onSpinError={handleSpinError}
+                bonusStatus={bonusStatus || undefined}
+                onBonusUsed={handleBonusUsed}
               />
             </div>
           )}

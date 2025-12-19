@@ -152,6 +152,15 @@ export const rateLimitLogs = pgTable("rate_limit_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// User state for tracking daily bonus and cooldowns
+export const userState = pgTable("user_state", {
+  id: serial("id").primaryKey(),
+  stakeId: text("stake_id").notNull().unique(),
+  lastBonusSpinAt: timestamp("last_bonus_spin_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 export const insertDemoUserSchema = createInsertSchema(demoUsers).omit({ id: true });
 export const insertSpinLogSchema = createInsertSchema(spinLogs).omit({ id: true, timestamp: true });
 export const insertGuaranteedWinSchema = createInsertSchema(guaranteedWins).omit({ id: true });
@@ -164,6 +173,7 @@ export const insertExportLogSchema = createInsertSchema(exportLogs).omit({ id: t
 export const insertFeatureToggleSchema = createInsertSchema(featureToggles).omit({ id: true, updatedAt: true });
 export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, processedAt: true });
 export const insertRateLimitLogSchema = createInsertSchema(rateLimitLogs).omit({ id: true, createdAt: true });
+export const insertUserStateSchema = createInsertSchema(userState).omit({ id: true, createdAt: true, updatedAt: true });
 
 export type DemoUser = typeof demoUsers.$inferSelect;
 export type InsertDemoUser = z.infer<typeof insertDemoUserSchema>;
@@ -179,6 +189,7 @@ export type ExportLog = typeof exportLogs.$inferSelect;
 export type FeatureToggle = typeof featureToggles.$inferSelect;
 export type Payout = typeof payouts.$inferSelect;
 export type RateLimitLog = typeof rateLimitLogs.$inferSelect;
+export type UserState = typeof userState.$inferSelect;
 
 export const stakeIdSchema = z
   .string()
