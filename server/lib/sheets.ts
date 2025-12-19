@@ -1,31 +1,61 @@
 import { google } from "googleapis";
-import { config, validateConfig } from "./config";
+import { config } from "./config";
 import type { WagerRow } from "@shared/schema";
+import crypto from "crypto";
 
-let sheetsClient: ReturnType<typeof google.sheets> | null = null;
+// Google Sheets OAuth connection via Replit integration
+let connectionSettings: any;
+
+async function getAccessToken() {
+  if (connectionSettings && connectionSettings.settings.expires_at && new Date(connectionSettings.settings.expires_at).getTime() > Date.now()) {
+    return connectionSettings.settings.access_token;
+  }
+  
+  const hostname = process.env.REPLIT_CONNECTORS_HOSTNAME;
+  const xReplitToken = process.env.REPL_IDENTITY 
+    ? 'repl ' + process.env.REPL_IDENTITY 
+    : process.env.WEB_REPL_RENEWAL 
+    ? 'depl ' + process.env.WEB_REPL_RENEWAL 
+    : null;
+
+  if (!xReplitToken) {
+    throw new Error('Replit token not found - Google Sheets connection unavailable');
+  }
+
+  connectionSettings = await fetch(
+    'https://' + hostname + '/api/v2/connection?include_secrets=true&connector_names=google-sheet',
+    {
+      headers: {
+        'Accept': 'application/json',
+        'X_REPLIT_TOKEN': xReplitToken
+      }
+    }
+  ).then(res => res.json()).then(data => data.items?.[0]);
+
+  const accessToken = connectionSettings?.settings?.access_token || connectionSettings.settings?.oauth?.credentials?.access_token;
+
+  if (!connectionSettings || !accessToken) {
+    throw new Error('Google Sheet not connected - please connect via Replit integrations');
+  }
+  return accessToken;
+}
+
+// Get a fresh Google Sheets client (tokens expire, so never cache)
+async function getSheetsClient() {
+  const accessToken = await getAccessToken();
+
+  const oauth2Client = new google.auth.OAuth2();
+  oauth2Client.setCredentials({
+    access_token: accessToken
+  });
+
+  return google.sheets({ version: 'v4', auth: oauth2Client });
+}
 
 // Cache for sheet data to reduce API calls
 let wagerDataCache: Map<string, WagerRow> | null = null;
 let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
-
-function getSheetsClient() {
-  if (sheetsClient) return sheetsClient;
-  
-  const configErrors = validateConfig();
-  if (configErrors.length > 0) {
-    throw new Error(`Configuration errors: ${configErrors.join(", ")}`);
-  }
-
-  const auth = new google.auth.JWT({
-    email: config.googleServiceAccountEmail,
-    key: config.googleServiceAccountPrivateKey,
-    scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
-  });
-
-  sheetsClient = google.sheets({ version: "v4", auth });
-  return sheetsClient;
-}
 
 // Find column index by header name (case-insensitive)
 function findColumnIndex(headers: string[], columnName: string): number {
@@ -35,7 +65,7 @@ function findColumnIndex(headers: string[], columnName: string): number {
 
 // Load all wager data into cache
 async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
-  const sheets = getSheetsClient();
+  const sheets = await getSheetsClient();
   
   const response = await sheets.spreadsheets.values.get({
     spreadsheetId: config.googleSheetsId,
@@ -162,5 +192,3 @@ export function computeDataHash(data: WagerRow[]): string {
   const content = JSON.stringify(data.sort((a, b) => a.stakeId.localeCompare(b.stakeId)));
   return crypto.createHash("sha256").update(content).digest("hex");
 }
-
-import crypto from "crypto";

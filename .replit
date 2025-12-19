@@ -42,3 +42,6 @@ waitForPort = 5000
 
 [userenv.shared]
 GOOGLE_SHEETS_ID = "1Idr4KaCkR5EYdQPyWMqtoUNVpRUPGczLy-UCaJU4jzc"
+
+[agent]
+integrations = ["google-sheet:1.0.0"]
