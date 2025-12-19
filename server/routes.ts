@@ -731,9 +731,9 @@ export async function registerRoutes(
       });
 
       return res.json({ success: true });
-    } catch (err) {
+    } catch (err: any) {
       console.error("Admin login error:", err);
-      return res.status(500).json({ message: "Login failed" });
+      return res.status(500).json({ message: "Login failed", error: err?.message });
     }
   });
 
