@@ -1,6 +1,6 @@
 export const config = {
   googleSheetsId: process.env.GOOGLE_SHEETS_ID || "",
-  wagerSheetName: process.env.WAGER_SHEET_NAME || "WAGER_DATA",
+  wagerSheetName: process.env.WAGER_SHEET_NAME || "Affiliate NGR Summary",
   spinLogSheetName: process.env.SPIN_LOG_SHEET_NAME || "SPIN_LOG",
   winProbability: parseFloat(process.env.WIN_PROBABILITY || "0.01"),
   prizeLabel: process.env.PRIZE_LABEL || "$5 Stake Tip",

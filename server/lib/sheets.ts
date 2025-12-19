@@ -75,48 +75,69 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
   const rows = response.data.values;
   const cache = new Map<string, WagerRow>();
   
-  if (!rows || rows.length <= 1) return cache;
+  if (!rows || rows.length <= 2) return cache;
 
-  // First row is headers - find column indices
-  const headers = rows[0].map((h: any) => String(h || ""));
+  // Find the header row - check first few rows for "User_Name" column
+  let headerRowIdx = 0;
+  let headers: string[] = [];
+  
+  for (let i = 0; i < Math.min(5, rows.length); i++) {
+    const potentialHeaders = rows[i].map((h: any) => String(h || "").trim());
+    if (potentialHeaders.some((h: string) => h.toLowerCase() === "user_name")) {
+      headerRowIdx = i;
+      headers = potentialHeaders;
+      break;
+    }
+  }
+  
+  if (headers.length === 0) {
+    console.error("Could not find User_Name column in sheet headers");
+    return cache;
+  }
+
   const userNameIdx = findColumnIndex(headers, "User_Name");
   const wageredWeeklyIdx = findColumnIndex(headers, "Wagered_Weekly");
   const wageredMonthlyIdx = findColumnIndex(headers, "Wagered_Monthly");
   const wageredOverallIdx = findColumnIndex(headers, "Wagered_Overall");
   
+  console.log(`Found headers at row ${headerRowIdx + 1}: User_Name=${userNameIdx}, Wagered_Weekly=${wageredWeeklyIdx}`);
+  
   // If headers not found, try fallback column positions
   const stakeIdCol = userNameIdx >= 0 ? userNameIdx : 0;
   const wageredCol = wageredWeeklyIdx >= 0 ? wageredWeeklyIdx : 1;
 
-  for (let i = 1; i < rows.length; i++) {
+  // Start from the row after headers
+  for (let i = headerRowIdx + 1; i < rows.length; i++) {
     const row = rows[i];
     const stakeId = (row[stakeIdCol] || "").toString().trim();
     if (!stakeId) continue;
     
     const normalizedId = stakeId.toLowerCase();
     
-    // Check for duplicate usernames
-    if (cache.has(normalizedId)) {
-      console.error(`Duplicate username found in sheet: ${stakeId}`);
-      continue;
-    }
+    // For duplicates, sum the wagered amounts instead of skipping
+    const existing = cache.get(normalizedId);
     
     // Parse wagered amount - use weekly if available, otherwise fall back
     let wageredAmount = 0;
     if (wageredWeeklyIdx >= 0 && row[wageredWeeklyIdx]) {
-      wageredAmount = parseFloat(row[wageredWeeklyIdx]) || 0;
+      wageredAmount = parseFloat(String(row[wageredWeeklyIdx]).replace(/,/g, "")) || 0;
     } else if (row[wageredCol]) {
-      wageredAmount = parseFloat(row[wageredCol]) || 0;
+      wageredAmount = parseFloat(String(row[wageredCol]).replace(/,/g, "")) || 0;
     }
     
     // Clamp negative values to 0
     wageredAmount = Math.max(0, wageredAmount);
     
-    cache.set(normalizedId, {
-      stakeId: stakeId,
-      wageredAmount: wageredAmount,
-      periodLabel: "Weekly",
-    });
+    if (existing) {
+      // Sum wagered amounts for duplicate users
+      existing.wageredAmount += wageredAmount;
+    } else {
+      cache.set(normalizedId, {
+        stakeId: stakeId,
+        wageredAmount: wageredAmount,
+        periodLabel: "Weekly",
+      });
+    }
   }
 
   return cache;
