@@ -103,13 +103,14 @@ function getClientIp(req: Request): string {
   return socketIp || "unknown";
 }
 
-// Check if user is blacklisted
-async function isUserBlacklisted(stakeId: string): Promise<boolean> {
+// Check if user is blacklisted - fails CLOSED (throws on error for security)
+async function checkUserBlacklist(stakeId: string): Promise<{ blacklisted: boolean; error?: string }> {
   try {
     const [flags] = await db.select().from(userFlags).where(eq(userFlags.stakeId, stakeId.toLowerCase()));
-    return flags?.isBlacklisted === true;
-  } catch {
-    return false;
+    return { blacklisted: flags?.isBlacklisted === true };
+  } catch (error) {
+    console.error("Blacklist check failed for", stakeId, error);
+    return { blacklisted: false, error: "Security check failed. Please try again." };
   }
 }
 
@@ -180,8 +181,12 @@ export async function registerRoutes(
         return res.status(429).json({ message: "Account rate limit exceeded. Please try again later." } as ErrorResponse);
       }
 
-      // Check blacklist
-      if (await isUserBlacklisted(stakeId)) {
+      // Check blacklist - fail closed on error
+      const blacklistCheck = await checkUserBlacklist(stakeId);
+      if (blacklistCheck.error) {
+        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
+      }
+      if (blacklistCheck.blacklisted) {
         return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
       }
 
@@ -291,6 +296,15 @@ export async function registerRoutes(
       const parsed = lookupRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
       const ipHash = hashIp(req.ip || "unknown");
+
+      // Check blacklist - fail closed on error
+      const blacklistCheck = await checkUserBlacklist(stakeId);
+      if (blacklistCheck.error) {
+        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
+      }
+      if (blacklistCheck.blacklisted) {
+        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
+      }
 
       // Check if user exists in sheet
       const wagerRow = await getWagerRow(stakeId);
@@ -457,6 +471,15 @@ export async function registerRoutes(
       const toTier = parsed.to_tier as SpinTier;
       const quantity = parsed.quantity;
 
+      // Check blacklist - fail closed on error
+      const blacklistCheck = await checkUserBlacklist(stakeId);
+      if (blacklistCheck.error) {
+        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
+      }
+      if (blacklistCheck.blacklisted) {
+        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
+      }
+
       // Validate conversion path
       if (fromTier === "bronze" && toTier !== "silver") {
         return res.status(400).json({ message: "Bronze can only convert to Silver" } as ErrorResponse);
@@ -508,6 +531,15 @@ export async function registerRoutes(
       const tier = parsed.tier as SpinTier;
       const quantity = parsed.quantity;
 
+      // Check blacklist - fail closed on error
+      const blacklistCheck = await checkUserBlacklist(stakeId);
+      if (blacklistCheck.error) {
+        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
+      }
+      if (blacklistCheck.blacklisted) {
+        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
+      }
+
       const cost = TIER_CONFIG[tier].cost * quantity;
       const walletBalance = await getWalletBalance(stakeId);
 
@@ -557,6 +589,15 @@ export async function registerRoutes(
       const parsed = withdrawRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
       const amount = parsed.amount;
+
+      // Check blacklist - fail closed on error
+      const blacklistCheck = await checkUserBlacklist(stakeId);
+      if (blacklistCheck.error) {
+        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
+      }
+      if (blacklistCheck.blacklisted) {
+        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
+      }
 
       const walletBalance = await getWalletBalance(stakeId);
       const pendingWithdrawals = await getPendingWithdrawals(stakeId);
