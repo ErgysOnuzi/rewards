@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { pgTable, text, integer, real, timestamp, serial } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, real, timestamp, serial, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
 // Spin tier types
@@ -88,6 +88,70 @@ export const walletTransactions = pgTable("wallet_transactions", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// User flags for blacklist/allowlist/disputed status
+export const userFlags = pgTable("user_flags", {
+  id: serial("id").primaryKey(),
+  stakeId: text("stake_id").notNull().unique(),
+  isBlacklisted: boolean("is_blacklisted").default(false).notNull(),
+  isAllowlisted: boolean("is_allowlisted").default(false).notNull(),
+  isDisputed: boolean("is_disputed").default(false).notNull(),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Admin sessions for authentication
+export const adminSessions = pgTable("admin_sessions", {
+  id: serial("id").primaryKey(),
+  sessionToken: text("session_token").notNull().unique(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  expiresAt: timestamp("expires_at").notNull(),
+});
+
+// Export logs for audit trail
+export const exportLogs = pgTable("export_logs", {
+  id: serial("id").primaryKey(),
+  campaign: text("campaign").notNull(),
+  weekLabel: text("week_label").notNull(),
+  ticketUnit: integer("ticket_unit").notNull(),
+  rowCount: integer("row_count").notNull(),
+  totalTickets: integer("total_tickets").notNull(),
+  dataHash: text("data_hash"), // SHA256 of the sheet data at export time
+  exportedBy: text("exported_by").default("admin"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Feature toggles for runtime configuration
+export const featureToggles = pgTable("feature_toggles", {
+  id: serial("id").primaryKey(),
+  key: text("key").notNull().unique(),
+  value: text("value").notNull(),
+  description: text("description"),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Payouts for tracking prize distribution
+export const payouts = pgTable("payouts", {
+  id: serial("id").primaryKey(),
+  stakeId: text("stake_id").notNull(),
+  amount: integer("amount").notNull(),
+  prize: text("prize"), // description of prize
+  status: text("status").default("pending").notNull(), // "pending", "sent", "failed"
+  transactionHash: text("transaction_hash"),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  processedAt: timestamp("processed_at"),
+});
+
+// Rate limit logs for abuse monitoring
+export const rateLimitLogs = pgTable("rate_limit_logs", {
+  id: serial("id").primaryKey(),
+  ipHash: text("ip_hash").notNull(),
+  stakeId: text("stake_id"),
+  action: text("action").notNull(), // "spin", "bonus_denied", "lookup"
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertDemoUserSchema = createInsertSchema(demoUsers).omit({ id: true });
 export const insertSpinLogSchema = createInsertSchema(spinLogs).omit({ id: true, timestamp: true });
 export const insertGuaranteedWinSchema = createInsertSchema(guaranteedWins).omit({ id: true });
@@ -95,6 +159,11 @@ export const insertUserWalletSchema = createInsertSchema(userWallets).omit({ id:
 export const insertUserSpinBalanceSchema = createInsertSchema(userSpinBalances).omit({ id: true });
 export const insertWithdrawalRequestSchema = createInsertSchema(withdrawalRequests).omit({ id: true, createdAt: true, processedAt: true });
 export const insertWalletTransactionSchema = createInsertSchema(walletTransactions).omit({ id: true, createdAt: true });
+export const insertUserFlagSchema = createInsertSchema(userFlags).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertExportLogSchema = createInsertSchema(exportLogs).omit({ id: true, createdAt: true });
+export const insertFeatureToggleSchema = createInsertSchema(featureToggles).omit({ id: true, updatedAt: true });
+export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, processedAt: true });
+export const insertRateLimitLogSchema = createInsertSchema(rateLimitLogs).omit({ id: true, createdAt: true });
 
 export type DemoUser = typeof demoUsers.$inferSelect;
 export type InsertDemoUser = z.infer<typeof insertDemoUserSchema>;
@@ -105,6 +174,11 @@ export type UserWallet = typeof userWallets.$inferSelect;
 export type UserSpinBalance = typeof userSpinBalances.$inferSelect;
 export type WithdrawalRequest = typeof withdrawalRequests.$inferSelect;
 export type WalletTransaction = typeof walletTransactions.$inferSelect;
+export type UserFlag = typeof userFlags.$inferSelect;
+export type ExportLog = typeof exportLogs.$inferSelect;
+export type FeatureToggle = typeof featureToggles.$inferSelect;
+export type Payout = typeof payouts.$inferSelect;
+export type RateLimitLog = typeof rateLimitLogs.$inferSelect;
 
 export const stakeIdSchema = z
   .string()
