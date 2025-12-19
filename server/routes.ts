@@ -133,7 +133,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
       }
       console.error("Lookup error:", err);
-      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
+      const errMsg = err instanceof Error ? err.message : "Internal server error";
+      if (errMsg.includes("Unable to parse range") || errMsg.includes("not connected")) {
+        return res.status(503).json({ message: "Google Sheet data unavailable. Please check sheet configuration." } as ErrorResponse);
+      }
+      return res.status(500).json({ message: errMsg } as ErrorResponse);
     }
   });
 
@@ -243,7 +247,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
       }
       console.error("Spin error:", err);
-      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
+      const errMsg = err instanceof Error ? err.message : "Internal server error";
+      if (errMsg.includes("Unable to parse range") || errMsg.includes("not connected")) {
+        return res.status(503).json({ message: "Google Sheet data unavailable. Please check sheet configuration." } as ErrorResponse);
+      }
+      return res.status(500).json({ message: errMsg } as ErrorResponse);
     }
   });
 
@@ -345,7 +353,11 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
       }
       console.error("Bonus spin error:", err);
-      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
+      const errMsg = err instanceof Error ? err.message : "Internal server error";
+      if (errMsg.includes("Unable to parse range") || errMsg.includes("not connected")) {
+        return res.status(503).json({ message: "Google Sheet data unavailable. Please check sheet configuration." } as ErrorResponse);
+      }
+      return res.status(500).json({ message: errMsg } as ErrorResponse);
     }
   });
 
