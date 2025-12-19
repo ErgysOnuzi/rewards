@@ -1,0 +1,145 @@
+You are a Replit Agent working inside an EXISTING LukeRewards codebase (already deployed on Replit). Your job is to implement the “Spins + Weekly Raffle” system exactly as specified below, using a Google Sheet as the source of truth for wagering data. Do not redesign the whole site unless necessary; implement the required flows with minimal, clean changes. Prioritize correctness, trust, and low friction.
+
+0) First actions (mandatory)
+	1.	Open the repo, identify stack (Next.js/React/Node/etc), routing, existing pages, existing UI components, env handling, and current “enter Stake ID” landing.
+	2.	Find where the current site stores data (if any). If none, add minimal DB (SQLite/Supabase/Prisma) OR local JSON storage only if DB not possible. You must persist spin history + cooldowns server-side.
+	3.	Add a simple config file for thresholds/odds (so values can be changed without code edits).
+
+1) Data source: Google Sheet (read-only)
+
+Source of truth is a spreadsheet that looks like “Affiliate NGR Summary”. Key columns you MUST use:
+	•	User identifier: User_Name (this is the Stake ID / username the user types)
+	•	Wager fields:
+	•	Wagered_Today
+	•	Wagered_Weekly
+	•	Wagered_Monthly
+	•	Wagered_Overall
+
+Rules:
+	•	Match is exact: User_Name == inputStakeId (case-insensitive match is acceptable ONLY if you normalize both, but store/display original).
+	•	If user not found -> “Not found in wagering data”.
+	•	Empty wager values -> treat as 0.
+	•	Negative values -> clamp to 0.
+	•	Duplicate usernames -> hard error + log; return “data error, contact support”.
+
+Implementation requirement:
+	•	Pull sheet data via Google Sheets API OR published CSV export URL.
+	•	Add env vars:
+	•	SHEETS_SOURCE_TYPE=api|csv
+	•	GOOGLE_SHEETS_ID
+	•	GOOGLE_SHEETS_RANGE (or sheet/tab name)
+	•	GOOGLE_API_KEY (if API)
+	•	SHEETS_CSV_URL (if CSV)
+	•	SHEETS_CACHE_TTL_SECONDS (default 300)
+	•	Cache sheet results server-side for TTL to avoid rate limits.
+	•	Build a server function getUserWagerSnapshot(stakeId) that returns:
+{
+stakeId,
+found: boolean,
+wageredToday,
+wageredWeekly,
+wageredMonthly,
+wageredOverall,
+lastUpdatedAt (if available),
+rawRow (optional for debugging)
+}
+
+2) Core product: Spins (house-favored)
+
+User flow:
+	1.	Landing page: input “Enter your Stake ID”.
+	2.	Click “Check eligibility”.
+	3.	Show a modal/popup:
+	•	Found / Not found
+	•	Wagered weekly value
+	•	Tickets computed
+	•	Checkbox: “I agree to the terms” (required)
+	•	Button: “Continue”
+	4.	If eligible, go to Spin page.
+
+Tickets:
+	•	Tickets derive from Wagered_Weekly ONLY.
+	•	Config value: TICKET_UNIT_WAGER (default 1000)
+	•	tickets = floor(wageredWeekly / TICKET_UNIT_WAGER)
+
+Spins:
+	•	Each spin costs 1 ticket (config SPIN_TICKET_COST=1).
+	•	Additionally there is a Daily Bonus Spin (see section 3).
+	•	Outcome is only:
+	•	WIN
+	•	LOSE
+	•	Win probability must be “very slim”, strongly house-favored.
+	•	Config: WIN_PROBABILITY=0.02 (2%) by default.
+	•	Add sound effects:
+	•	spin start
+	•	reel ticking (optional)
+	•	win sound
+	•	lose sound
+	•	The client explicitly wants audio to be important.
+
+UI:
+	•	Keep it casino/slot-like but do not overbuild.
+	•	Must include:
+	•	Spin button (disabled while spinning)
+	•	Tickets remaining
+	•	Daily bonus availability indicator
+	•	Result display
+	•	Auto-spin is NOT needed.
+
+Server-side persistence (mandatory):
+Create a table/collection user_spins:
+	•	id
+	•	stake_id
+	•	type: ticket | daily_bonus
+	•	result: win | lose
+	•	created_at
+
+Create a table/collection user_state:
+	•	stake_id (unique)
+	•	last_bonus_spin_at
+	•	created_at
+	•	updated_at
+
+Never trust client-side values for tickets/eligibility. Always re-check on server.
+
+3) Daily Bonus Spin (mandatory)
+	•	One bonus spin per Stake ID per 24h.
+	•	Does not consume tickets.
+	•	Still uses same house-favored odds.
+
+Implementation:
+	•	Endpoint: POST /api/spin/bonus
+	•	Check cooldown:
+	•	if now - last_bonus_spin_at < 24h -> reject with remaining time.
+	•	On success:
+	•	record spin in user_spins
+	•	update last_bonus_spin_at
+
+4) Weekly Raffle support (export only for now)
+
+Goal:
+	•	Generate raffle entries based on weekly tickets.
+
+Implementation:
+	•	Admin-only page or protected route (simple password via env is acceptable for now):
+	•	env: ADMIN_PASSWORD
+	•	Page: “Raffle Export”
+	•	input: campaign/week label
+	•	export CSV of:
+stake_id, tickets
+	•	tickets computed the same way: floor(wageredWeekly / TICKET_UNIT_WAGER)
+	•	This does NOT run the raffle; it only exports entries.
+
+5) Terms / disclaimers (mandatory)
+
+Add a visible “Information” section on the landing/modal and footer:
+
+Must include these points:
+	•	User must be under code “Play” on Stake.us or Stake.com to qualify.
+	•	This raffle/spins promo is hosted and paid entirely by LukeTheDegen; Stake does not review accounts, approve entries, or verify eligibility.
+	•	Users enter their Stake ID voluntarily; no Stake login is required.
+	•	Include the RTP counting note:
+	•	RTP ≤ 98% -> 100% wager counts
+	•	RTP > 98% -> 50% wager counts
+	•	RTP ≥ 99% -> 10% wager counts
+(Stati...

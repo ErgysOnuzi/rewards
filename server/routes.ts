@@ -5,19 +5,21 @@ import {
   purchaseSpinsRequestSchema, withdrawRequestSchema, processWithdrawalSchema,
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
+  userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs,
   TIER_CONFIG, CONVERSION_RATES, type SpinTier, type SpinBalances
 } from "@shared/schema";
 import type { 
   LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
-import { getWagerRow, calculateTickets, determineSpinResult } from "./lib/sheets";
+import { getWagerRow, calculateTickets, determineSpinResult, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited } from "./lib/rateLimit";
 import { config } from "./lib/config";
-import { ZodError } from "zod";
+import { ZodError, z } from "zod";
 import { db } from "./db";
-import { eq, desc, sql, and } from "drizzle-orm";
+import { eq, desc, sql, and, gte } from "drizzle-orm";
+import crypto from "crypto";
 
 
 // Count spins for a user from database
@@ -481,6 +483,558 @@ export async function registerRoutes(
       prizeLabel: config.prizeLabel,
       tierConfig: TIER_CONFIG,
       conversionRates: CONVERSION_RATES,
+    });
+  });
+
+  // =================== ADMIN AUTHENTICATION ===================
+  const adminLoginSchema = z.object({
+    password: z.string().min(1),
+  });
+
+  app.post("/api/admin/login", async (req: Request, res: Response) => {
+    try {
+      const { password } = adminLoginSchema.parse(req.body);
+      const adminPassword = process.env.ADMIN_PASSWORD;
+      
+      if (!adminPassword) {
+        return res.status(500).json({ message: "Admin password not configured" });
+      }
+      if (password !== adminPassword) {
+        return res.status(401).json({ message: "Invalid password" });
+      }
+
+      const sessionToken = crypto.randomBytes(32).toString("hex");
+      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+
+      await db.insert(adminSessions).values({ sessionToken, expiresAt });
+      
+      res.cookie("admin_session", sessionToken, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "strict",
+        expires: expiresAt,
+      });
+
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Admin login error:", err);
+      return res.status(500).json({ message: "Login failed" });
+    }
+  });
+
+  app.post("/api/admin/logout", async (req: Request, res: Response) => {
+    const sessionToken = req.cookies?.admin_session;
+    if (sessionToken) {
+      await db.delete(adminSessions).where(eq(adminSessions.sessionToken, sessionToken));
+    }
+    res.clearCookie("admin_session");
+    return res.json({ success: true });
+  });
+
+  async function verifyAdminSession(req: Request): Promise<boolean> {
+    const sessionToken = req.cookies?.admin_session;
+    if (!sessionToken) return false;
+    
+    const [session] = await db.select().from(adminSessions)
+      .where(and(eq(adminSessions.sessionToken, sessionToken), gte(adminSessions.expiresAt, new Date())));
+    return !!session;
+  }
+
+  app.get("/api/admin/verify", async (req: Request, res: Response) => {
+    const isValid = await verifyAdminSession(req);
+    return res.json({ authenticated: isValid });
+  });
+
+  // Middleware helper
+  async function requireAdmin(req: Request, res: Response): Promise<boolean> {
+    const isValid = await verifyAdminSession(req);
+    if (!isValid) {
+      res.status(401).json({ message: "Admin authentication required" });
+      return false;
+    }
+    return true;
+  }
+
+  // =================== DATA STATUS PANEL ===================
+  app.get("/api/admin/data-status", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const cacheStatus = getCacheStatus();
+    const allData = getAllWagerData();
+    
+    // Find duplicates
+    const seen = new Set<string>();
+    const duplicates: string[] = [];
+    for (const row of allData) {
+      const normalized = row.stakeId.toLowerCase();
+      if (seen.has(normalized)) {
+        duplicates.push(row.stakeId);
+      }
+      seen.add(normalized);
+    }
+
+    return res.json({
+      sheetId: config.googleSheetsId ? `...${config.googleSheetsId.slice(-8)}` : "Not configured",
+      tabName: config.wagerSheetName,
+      ...cacheStatus,
+      duplicateCount: duplicates.length,
+      duplicates: duplicates.slice(0, 20),
+    });
+  });
+
+  app.post("/api/admin/refresh-cache", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const result = await refreshCache();
+      return res.json(result);
+    } catch (err: any) {
+      return res.status(500).json({ message: err.message || "Failed to refresh cache" });
+    }
+  });
+
+  // =================== USER FLAGS (BLACKLIST/ALLOWLIST/DISPUTED) ===================
+  const userFlagSchema = z.object({
+    stakeId: z.string().min(1),
+    isBlacklisted: z.boolean().optional(),
+    isAllowlisted: z.boolean().optional(),
+    isDisputed: z.boolean().optional(),
+    notes: z.string().optional(),
+  });
+
+  app.get("/api/admin/user-flags", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const flags = await db.select().from(userFlags).orderBy(desc(userFlags.updatedAt));
+    return res.json({ flags });
+  });
+
+  app.post("/api/admin/user-flags", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const data = userFlagSchema.parse(req.body);
+      const stakeId = data.stakeId.toLowerCase();
+      
+      const [existing] = await db.select().from(userFlags).where(eq(userFlags.stakeId, stakeId));
+      
+      if (existing) {
+        await db.update(userFlags).set({
+          isBlacklisted: data.isBlacklisted ?? existing.isBlacklisted,
+          isAllowlisted: data.isAllowlisted ?? existing.isAllowlisted,
+          isDisputed: data.isDisputed ?? existing.isDisputed,
+          notes: data.notes ?? existing.notes,
+          updatedAt: new Date(),
+        }).where(eq(userFlags.stakeId, stakeId));
+      } else {
+        await db.insert(userFlags).values({
+          stakeId,
+          isBlacklisted: data.isBlacklisted ?? false,
+          isAllowlisted: data.isAllowlisted ?? false,
+          isDisputed: data.isDisputed ?? false,
+          notes: data.notes ?? null,
+        });
+      }
+      
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("User flag error:", err);
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  app.delete("/api/admin/user-flags/:stakeId", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const stakeId = req.params.stakeId.toLowerCase();
+    await db.delete(userFlags).where(eq(userFlags.stakeId, stakeId));
+    return res.json({ success: true });
+  });
+
+  // Check if allowlist mode is enabled
+  app.get("/api/admin/allowlist-mode", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const [toggle] = await db.select().from(featureToggles).where(eq(featureToggles.key, "ALLOWLIST_MODE_ENABLED"));
+    return res.json({ enabled: toggle?.value === "true" });
+  });
+
+  // =================== USER LOOKUP TOOL ===================
+  app.get("/api/admin/user-lookup/:stakeId", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const stakeId = req.params.stakeId.toLowerCase();
+    
+    // Get wager data from sheets
+    const wagerRow = await getWagerRow(stakeId);
+    const cacheStatus = getCacheStatus();
+    
+    // Get local stats from database
+    const spins = await db.select().from(spinLogs).where(eq(spinLogs.stakeId, stakeId)).orderBy(desc(spinLogs.timestamp));
+    const [wallet] = await db.select().from(userWallets).where(eq(userWallets.stakeId, stakeId));
+    const spinBalances = await getSpinBalances(stakeId);
+    const [flagData] = await db.select().from(userFlags).where(eq(userFlags.stakeId, stakeId));
+    const transactions = await db.select().from(walletTransactions).where(eq(walletTransactions.stakeId, stakeId)).orderBy(desc(walletTransactions.createdAt)).limit(20);
+    
+    const winCount = spins.filter(s => s.result === "WIN").length;
+    const lastSpin = spins[0];
+
+    return res.json({
+      found: !!wagerRow,
+      wagerData: wagerRow,
+      sheetLastUpdated: cacheStatus.lastFetchTime,
+      computedTickets: wagerRow ? calculateTickets(wagerRow.wageredAmount) : 0,
+      localStats: {
+        totalSpins: spins.length,
+        wins: winCount,
+        lastSpinTime: lastSpin?.timestamp || null,
+        walletBalance: wallet?.balance || 0,
+        spinBalances,
+      },
+      flags: flagData || null,
+      recentTransactions: transactions,
+    });
+  });
+
+  // =================== RATE LIMIT & ABUSE MONITORING ===================
+  app.get("/api/admin/rate-stats", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+    
+    // Spins in last hour
+    const spinsLastHour = await db.select({ count: sql<number>`count(*)` })
+      .from(spinLogs).where(gte(spinLogs.timestamp, oneHourAgo));
+    
+    // Rate limit logs (bonus denials, etc)
+    const denials = await db.select().from(rateLimitLogs)
+      .where(and(eq(rateLimitLogs.action, "bonus_denied"), gte(rateLimitLogs.createdAt, oneHourAgo)));
+    
+    // Top 20 stake IDs by spin attempts (last hour)
+    const topSpinners = await db.select({
+      stakeId: spinLogs.stakeId,
+      count: sql<number>`count(*)`,
+    }).from(spinLogs).where(gte(spinLogs.timestamp, oneHourAgo))
+      .groupBy(spinLogs.stakeId).orderBy(desc(sql`count(*)`)).limit(20);
+    
+    // IP-based anomalies: same IP, multiple stake IDs
+    const ipAnomalies = await db.select({
+      ipHash: spinLogs.ipHash,
+      stakeIds: sql<string>`string_agg(DISTINCT stake_id, ', ')`,
+      idCount: sql<number>`count(DISTINCT stake_id)`,
+    }).from(spinLogs).where(gte(spinLogs.timestamp, oneHourAgo))
+      .groupBy(spinLogs.ipHash)
+      .having(sql`count(DISTINCT stake_id) > 1`)
+      .orderBy(desc(sql`count(DISTINCT stake_id)`)).limit(20);
+
+    return res.json({
+      spinsLastHour: Number(spinsLastHour[0]?.count || 0),
+      bonusDenials: denials.length,
+      topSpinners,
+      ipAnomalies,
+    });
+  });
+
+  // =================== FEATURE TOGGLES ===================
+  app.get("/api/admin/toggles", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const toggles = await db.select().from(featureToggles);
+    
+    // Default toggles if not set
+    const defaults: Record<string, { value: string; description: string }> = {
+      WIN_PROBABILITY_BRONZE: { value: "0.01", description: "Bronze spin win probability" },
+      WIN_PROBABILITY_SILVER: { value: "0.004", description: "Silver spin win probability" },
+      WIN_PROBABILITY_GOLD: { value: "0.005", description: "Gold spin win probability" },
+      SHOW_RECENT_WINS: { value: "true", description: "Show recent wins on homepage" },
+      TICKET_UNIT_WAGER: { value: "1000", description: "Wager amount per ticket" },
+      SPINS_ENABLED: { value: "true", description: "Enable/disable spins globally" },
+      RAFFLE_EXPORT_ENABLED: { value: "true", description: "Enable/disable raffle export" },
+      ALLOWLIST_MODE_ENABLED: { value: "false", description: "Only allowlisted users can spin" },
+    };
+    
+    const result: Record<string, any> = {};
+    for (const [key, def] of Object.entries(defaults)) {
+      const found = toggles.find(t => t.key === key);
+      result[key] = { value: found?.value ?? def.value, description: def.description };
+    }
+    
+    return res.json({ toggles: result });
+  });
+
+  const toggleUpdateSchema = z.object({
+    key: z.string().min(1),
+    value: z.string(),
+  });
+
+  app.post("/api/admin/toggles", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { key, value } = toggleUpdateSchema.parse(req.body);
+      const [existing] = await db.select().from(featureToggles).where(eq(featureToggles.key, key));
+      
+      if (existing) {
+        await db.update(featureToggles).set({ value, updatedAt: new Date() }).where(eq(featureToggles.key, key));
+      } else {
+        await db.insert(featureToggles).values({ key, value });
+      }
+      
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  // =================== PAYOUTS ===================
+  const payoutSchema = z.object({
+    stakeId: z.string().min(1),
+    amount: z.number().positive(),
+    prize: z.string().optional(),
+    notes: z.string().optional(),
+  });
+
+  app.get("/api/admin/payouts", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const allPayouts = await db.select().from(payouts).orderBy(desc(payouts.createdAt));
+    return res.json({ payouts: allPayouts });
+  });
+
+  app.post("/api/admin/payouts", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const data = payoutSchema.parse(req.body);
+      await db.insert(payouts).values({
+        stakeId: data.stakeId.toLowerCase(),
+        amount: data.amount,
+        prize: data.prize || null,
+        notes: data.notes || null,
+        status: "pending",
+      });
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  const payoutUpdateSchema = z.object({
+    id: z.number().positive(),
+    status: z.enum(["pending", "sent", "failed"]),
+    transactionHash: z.string().optional(),
+    notes: z.string().optional(),
+  });
+
+  app.patch("/api/admin/payouts", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { id, status, transactionHash, notes } = payoutUpdateSchema.parse(req.body);
+      await db.update(payouts).set({
+        status,
+        transactionHash: transactionHash || null,
+        notes: notes || null,
+        processedAt: status !== "pending" ? new Date() : null,
+      }).where(eq(payouts.id, id));
+      return res.json({ success: true });
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  // Bulk upload payouts from CSV
+  const bulkPayoutsSchema = z.object({
+    payouts: z.array(z.object({
+      stakeId: z.string(),
+      amount: z.number().positive(),
+      prize: z.string().optional(),
+    })),
+  });
+
+  app.post("/api/admin/payouts/bulk", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { payouts: payoutList } = bulkPayoutsSchema.parse(req.body);
+      for (const p of payoutList) {
+        await db.insert(payouts).values({
+          stakeId: p.stakeId.toLowerCase(),
+          amount: p.amount,
+          prize: p.prize || null,
+          status: "pending",
+        });
+      }
+      return res.json({ success: true, count: payoutList.length });
+    } catch (err) {
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  // =================== RAFFLE EXPORT WITH AUDIT ===================
+
+  const exportSchema = z.object({
+    campaign: z.string().min(1),
+    weekLabel: z.string().min(1),
+    ticketUnit: z.number().positive().default(1000),
+    wagerField: z.enum(["Wagered_Weekly", "Wagered_Monthly", "Wagered_Overall"]).default("Wagered_Weekly"),
+  });
+
+  app.post("/api/admin/export/preview", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const params = exportSchema.parse(req.body);
+      const allData = getAllWagerData();
+      const flaggedUsers = await db.select().from(userFlags);
+      const blacklist = new Set(flaggedUsers.filter(f => f.isBlacklisted).map(f => f.stakeId));
+      const disputed = new Set(flaggedUsers.filter(f => f.isDisputed).map(f => f.stakeId));
+      
+      // Check allowlist mode
+      const [allowlistToggle] = await db.select().from(featureToggles).where(eq(featureToggles.key, "ALLOWLIST_MODE_ENABLED"));
+      const allowlistMode = allowlistToggle?.value === "true";
+      const allowlist = new Set(flaggedUsers.filter(f => f.isAllowlisted).map(f => f.stakeId));
+      
+      const entries: { stakeId: string; wager: number; tickets: number; status: string }[] = [];
+      let totalTickets = 0;
+      let eligibleUsers = 0;
+      let wagers: number[] = [];
+      
+      for (const row of allData) {
+        const normalizedId = row.stakeId.toLowerCase();
+        let status = "ok";
+        
+        if (blacklist.has(normalizedId)) {
+          status = "blacklisted";
+        } else if (disputed.has(normalizedId)) {
+          status = "disputed";
+        } else if (allowlistMode && !allowlist.has(normalizedId)) {
+          status = "not_allowlisted";
+        } else if (row.wageredAmount <= 0) {
+          status = "zero_wager";
+        }
+        
+        const tickets = Math.floor(row.wageredAmount / params.ticketUnit);
+        
+        if (status === "ok" && tickets > 0) {
+          eligibleUsers++;
+          totalTickets += tickets;
+          wagers.push(row.wageredAmount);
+        }
+        
+        entries.push({
+          stakeId: row.stakeId,
+          wager: row.wageredAmount,
+          tickets: status === "ok" ? tickets : 0,
+          status,
+        });
+      }
+      
+      // Top 10 by tickets
+      const sorted = [...entries].filter(e => e.status === "ok").sort((a, b) => b.tickets - a.tickets);
+      const top10 = sorted.slice(0, 10);
+      
+      // Stats
+      const minWager = wagers.length ? Math.min(...wagers) : 0;
+      const maxWager = wagers.length ? Math.max(...wagers) : 0;
+      const avgWager = wagers.length ? wagers.reduce((a, b) => a + b, 0) / wagers.length : 0;
+      const totalWager = wagers.reduce((a, b) => a + b, 0);
+      
+      return res.json({
+        entries,
+        summary: {
+          eligibleUsers,
+          totalTickets,
+          top10,
+          minWager,
+          maxWager,
+          avgWager: Math.round(avgWager),
+          totalWager,
+        },
+        params,
+      });
+    } catch (err) {
+      console.error("Export preview error:", err);
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  app.post("/api/admin/export/generate", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const params = exportSchema.parse(req.body);
+      const allData = getAllWagerData();
+      const flaggedUsers = await db.select().from(userFlags);
+      const blacklist = new Set(flaggedUsers.filter(f => f.isBlacklisted).map(f => f.stakeId));
+      const disputed = new Set(flaggedUsers.filter(f => f.isDisputed).map(f => f.stakeId));
+      
+      const [allowlistToggle] = await db.select().from(featureToggles).where(eq(featureToggles.key, "ALLOWLIST_MODE_ENABLED"));
+      const allowlistMode = allowlistToggle?.value === "true";
+      const allowlist = new Set(flaggedUsers.filter(f => f.isAllowlisted).map(f => f.stakeId));
+      
+      const entries: { stake_id: string; tickets: number; campaign: string; week_label: string; generated_at: string }[] = [];
+      let totalTickets = 0;
+      
+      for (const row of allData) {
+        const normalizedId = row.stakeId.toLowerCase();
+        if (blacklist.has(normalizedId)) continue;
+        if (disputed.has(normalizedId)) continue;
+        if (allowlistMode && !allowlist.has(normalizedId)) continue;
+        if (row.wageredAmount <= 0) continue;
+        
+        const tickets = Math.floor(row.wageredAmount / params.ticketUnit);
+        if (tickets <= 0) continue;
+        
+        totalTickets += tickets;
+        entries.push({
+          stake_id: row.stakeId,
+          tickets,
+          campaign: params.campaign,
+          week_label: params.weekLabel,
+          generated_at: new Date().toISOString(),
+        });
+      }
+      
+      // Compute data hash for integrity
+      const dataHash = computeDataHash(allData);
+      
+      // Log export
+      await db.insert(exportLogs).values({
+        campaign: params.campaign,
+        weekLabel: params.weekLabel,
+        ticketUnit: params.ticketUnit,
+        rowCount: entries.length,
+        totalTickets,
+        dataHash,
+        exportedBy: "admin",
+      });
+      
+      return res.json({
+        entries,
+        totalTickets,
+        rowCount: entries.length,
+        dataHash,
+      });
+    } catch (err) {
+      console.error("Export generate error:", err);
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  app.get("/api/admin/export/logs", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const logs = await db.select().from(exportLogs).orderBy(desc(exportLogs.createdAt)).limit(20);
+    return res.json({ logs });
+  });
+
+  // =================== BACKUP EXPORT ===================
+  app.get("/api/admin/backup-export", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const allData = getAllWagerData();
+    const dataHash = computeDataHash(allData);
+    
+    return res.json({
+      timestamp: new Date().toISOString(),
+      dataHash,
+      rowCount: allData.length,
+      data: allData,
     });
   });
 

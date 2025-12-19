@@ -121,3 +121,46 @@ export function determineSpinResult(tier: SpinTier = "bronze"): "WIN" | "LOSE" {
   const winProbability = TIER_CONFIG[tier].winProbability;
   return Math.random() < winProbability ? "WIN" : "LOSE";
 }
+
+export function getCacheStatus(): {
+  loaded: boolean;
+  rowCount: number;
+  lastFetchTime: Date | null;
+  cacheTtlMs: number;
+  cacheAge: number;
+  isExpired: boolean;
+} {
+  const now = Date.now();
+  const cacheAge = cacheTimestamp ? now - cacheTimestamp : 0;
+  return {
+    loaded: wagerDataCache !== null,
+    rowCount: wagerDataCache?.size || 0,
+    lastFetchTime: cacheTimestamp ? new Date(cacheTimestamp) : null,
+    cacheTtlMs: CACHE_TTL_MS,
+    cacheAge,
+    isExpired: !cacheTimestamp || cacheAge > CACHE_TTL_MS,
+  };
+}
+
+export async function refreshCache(): Promise<{ success: boolean; rowCount: number }> {
+  try {
+    wagerDataCache = await loadWagerDataCache();
+    cacheTimestamp = Date.now();
+    return { success: true, rowCount: wagerDataCache.size };
+  } catch (err) {
+    console.error("Failed to refresh cache:", err);
+    throw err;
+  }
+}
+
+export function getAllWagerData(): WagerRow[] {
+  if (!wagerDataCache) return [];
+  return Array.from(wagerDataCache.values());
+}
+
+export function computeDataHash(data: WagerRow[]): string {
+  const content = JSON.stringify(data.sort((a, b) => a.stakeId.localeCompare(b.stakeId)));
+  return crypto.createHash("sha256").update(content).digest("hex");
+}
+
+import crypto from "crypto";
