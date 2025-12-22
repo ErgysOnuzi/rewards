@@ -22,11 +22,14 @@ import { eq, desc, sql, and, gte } from "drizzle-orm";
 import crypto from "crypto";
 
 
-// Count spins for a user from database
+// Count regular spins for a user from database (excludes bonus spins)
 async function countSpinsForStakeId(stakeId: string): Promise<number> {
   const result = await db.select({ count: sql<number>`count(*)` })
     .from(spinLogs)
-    .where(eq(spinLogs.stakeId, stakeId));
+    .where(and(
+      eq(spinLogs.stakeId, stakeId),
+      sql`${spinLogs.prizeLabel} NOT LIKE '[BONUS]%'`
+    ));
   return Number(result[0]?.count || 0);
 }
 
