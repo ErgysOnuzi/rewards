@@ -493,11 +493,14 @@ export default function CaseOpening({
       const items = generateReelItems(targetPrize, 50);
       setReelItems(items);
       
+      // Item width (100px) + gap (4px from gap-1) = 104px per slot
       const itemWidth = 100;
+      const gapWidth = 4;
+      const slotWidth = itemWidth + gapWidth;
       const targetIndex = Math.floor(items.length * 0.75);
       const containerWidth = reelRef.current?.offsetWidth || 400;
       const centerOffset = containerWidth / 2 - itemWidth / 2;
-      const finalPosition = -(targetIndex * itemWidth) + centerOffset;
+      const finalPosition = -(targetIndex * slotWidth) + centerOffset;
       
       setSpinState("spinning");
       
@@ -575,11 +578,14 @@ export default function CaseOpening({
       const items = generateReelItems(targetPrize, 50);
       setReelItems(items);
       
+      // Item width (100px) + gap (4px from gap-1) = 104px per slot
       const itemWidth = 100;
+      const gapWidth = 4;
+      const slotWidth = itemWidth + gapWidth;
       const targetIndex = Math.floor(items.length * 0.75);
       const containerWidth = reelRef.current?.offsetWidth || 400;
       const centerOffset = containerWidth / 2 - itemWidth / 2;
-      const finalPosition = -(targetIndex * itemWidth) + centerOffset;
+      const finalPosition = -(targetIndex * slotWidth) + centerOffset;
       
       setSpinState("spinning");
       
@@ -690,7 +696,7 @@ export default function CaseOpening({
                 data-testid="case-reel"
               >
                 <div 
-                  className="absolute top-0 left-0 h-full flex items-center"
+                  className="absolute top-0 left-0 h-full flex items-center gap-1"
                   style={{
                     transform: `translateX(${reelPosition}px)`,
                     transition: spinState === "spinning" ? "transform 3.5s cubic-bezier(0.15, 0.85, 0.25, 1)" : "none",
@@ -700,7 +706,7 @@ export default function CaseOpening({
                     reelItems.map((item, index) => (
                       <motion.div
                         key={index}
-                        className={`flex-shrink-0 w-[100px] h-20 mx-0.5 rounded-md border-2 flex items-center justify-center ${getPrizeColorClasses(item.color)} ${
+                        className={`flex-shrink-0 w-[100px] h-20 rounded-md border-2 flex items-center justify-center ${getPrizeColorClasses(item.color)} ${
                           highlightedIndex === index ? `shadow-lg ${getPrizeGlowClass(item.color)} ring-2 ring-white/50` : ""
                         }`}
                         animate={highlightedIndex === index ? {
