@@ -75,6 +75,13 @@ export default function Home() {
       throw new Error("No ticket data available");
     }
 
+    // Optimistically update ticket count immediately
+    setTicketData({
+      ...ticketData,
+      ticketsRemaining: ticketData.ticketsRemaining - 1,
+      ticketsUsed: ticketData.ticketsUsed + 1,
+    });
+
     const response = await fetch("/api/spin", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -84,6 +91,12 @@ export default function Home() {
     const data = await response.json();
 
     if (!response.ok) {
+      // Revert on error
+      setTicketData({
+        ...ticketData,
+        ticketsRemaining: ticketData.ticketsRemaining,
+        ticketsUsed: ticketData.ticketsUsed,
+      });
       throw new Error(data.message || "Spin failed");
     }
 

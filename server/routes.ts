@@ -207,9 +207,9 @@ export async function registerRoutes(
       const ticketsUsedAfter = spinNumber;
       const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
-      // Log spin to database
+      // Log spin to database (use lowercase stakeId for consistent counting)
       await db.insert(spinLogs).values({
-        stakeId: wagerRow.stakeId,
+        stakeId: stakeId,
         wageredAmount: wagerRow.wageredAmount,
         spinNumber,
         result: isWin ? "WIN" : "LOSE",
