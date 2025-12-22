@@ -138,6 +138,7 @@ export const adminSessions = pgTable("admin_sessions", {
   sessionToken: text("session_token").notNull().unique(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   expiresAt: timestamp("expires_at").notNull(),
+  lastActivityAt: timestamp("last_activity_at").defaultNow(),
 });
 
 // Export logs for audit trail

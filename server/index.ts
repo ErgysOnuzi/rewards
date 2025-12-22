@@ -4,6 +4,7 @@ import { serveStatic } from "./static";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { startBackgroundRefresh } from "./lib/sheets";
+import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/security";
 
 const app = express();
 const httpServer = createServer(app);
@@ -14,7 +15,14 @@ declare module "http" {
   }
 }
 
+// Security middleware - apply first
+app.use(requestIdMiddleware);
+app.use(securityHeaders);
+
 app.use(cookieParser());
+
+// CSRF protection for state-changing requests
+app.use(csrfProtection);
 
 app.use(
   express.json({
@@ -69,10 +77,17 @@ app.use((req, res, next) => {
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
-    const message = err.message || "Internal Server Error";
+    
+    // Log full error server-side for debugging
+    console.error(`[ERROR] ${status}:`, err.message || err);
+    
+    // Never expose internal error details to client in production
+    const isProduction = process.env.NODE_ENV === "production";
+    const safeMessage = isProduction && status >= 500 
+      ? "An error occurred. Please try again."
+      : (err.message || "Internal Server Error");
 
-    res.status(status).json({ message });
-    throw err;
+    res.status(status).json({ message: safeMessage });
   });
 
   // importantly only setup vite in development and after

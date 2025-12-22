@@ -18,8 +18,16 @@ import { isRateLimited, isStakeIdRateLimited } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { ZodError, z } from "zod";
 import { db } from "./db";
-import { eq, desc, sql, and, gte } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lt } from "drizzle-orm";
 import crypto from "crypto";
+import { 
+  logSecurityEvent, 
+  SESSION_CONFIG, 
+  hashForLogging, 
+  getClientIpForSecurity,
+  generateCSRFToken,
+  getRecentSecurityEvents
+} from "./lib/security";
 
 
 // Count regular spins for a user from database (excludes bonus spins)
@@ -576,6 +584,9 @@ export async function registerRoutes(
   });
 
   app.post("/api/admin/login", async (req: Request, res: Response) => {
+    const clientIp = getClientIpForSecurity(req);
+    const ipHash = hashForLogging(clientIp);
+    
     try {
       const { password } = adminLoginSchema.parse(req.body);
       const adminPassword = process.env.ADMIN_PASSWORD;
@@ -583,53 +594,121 @@ export async function registerRoutes(
       if (!adminPassword) {
         return res.status(500).json({ message: "Admin password not configured" });
       }
-      if (password !== adminPassword) {
+      
+      // Use timing-safe comparison to prevent timing attacks
+      const passwordBuffer = Buffer.from(password);
+      const adminPasswordBuffer = Buffer.from(adminPassword);
+      
+      if (passwordBuffer.length !== adminPasswordBuffer.length || 
+          !crypto.timingSafeEqual(passwordBuffer, adminPasswordBuffer)) {
+        logSecurityEvent({
+          type: "auth_failure",
+          ipHash,
+          details: "Invalid admin password attempt",
+        });
         return res.status(401).json({ message: "Invalid password" });
       }
 
+      // Generate new session token (regenerate on login for session fixation protection)
       const sessionToken = crypto.randomBytes(32).toString("hex");
-      const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+      const expiresAt = new Date(Date.now() + SESSION_CONFIG.ABSOLUTE_TIMEOUT_MS);
+      const lastActivityAt = new Date();
 
       try {
-        await db.insert(adminSessions).values({ sessionToken, expiresAt });
+        // Clean up any existing sessions for this IP (optional: prevents session accumulation)
+        await db.delete(adminSessions).where(lt(adminSessions.expiresAt, new Date()));
+        
+        await db.insert(adminSessions).values({ 
+          sessionToken, 
+          expiresAt,
+          lastActivityAt,
+        });
       } catch (dbErr: any) {
         console.error("Database error during login:", dbErr);
         return res.status(500).json({ 
           message: "Database error - tables may not exist. Run 'npm run db:push' in production shell.",
-          error: dbErr?.message 
         });
       }
       
-      res.cookie("admin_session", sessionToken, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === "production",
-        sameSite: "lax",
+      // Set secure cookie with strict settings
+      res.cookie(SESSION_CONFIG.COOKIE_NAME, sessionToken, {
+        ...SESSION_CONFIG.COOKIE_OPTIONS,
         expires: expiresAt,
       });
 
-      return res.json({ success: true });
+      // Generate CSRF token for admin session
+      const csrfToken = generateCSRFToken(sessionToken);
+      
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash,
+        details: "Admin login successful",
+      });
+
+      return res.json({ success: true, csrf_token: csrfToken });
     } catch (err: any) {
       console.error("Admin login error:", err);
-      return res.status(500).json({ message: "Login failed", error: err?.message });
+      logSecurityEvent({
+        type: "auth_failure",
+        ipHash,
+        details: `Login error: ${err?.message || "unknown"}`,
+      });
+      return res.status(500).json({ message: "Login failed" });
     }
   });
 
   app.post("/api/admin/logout", async (req: Request, res: Response) => {
-    const sessionToken = req.cookies?.admin_session;
+    const sessionToken = req.cookies?.[SESSION_CONFIG.COOKIE_NAME];
+    const clientIp = getClientIpForSecurity(req);
+    const ipHash = hashForLogging(clientIp);
+    
     if (sessionToken) {
+      // Invalidate session server-side
       await db.delete(adminSessions).where(eq(adminSessions.sessionToken, sessionToken));
+      
+      logSecurityEvent({
+        type: "session_invalidated",
+        ipHash,
+        details: "Admin logout",
+      });
     }
-    res.clearCookie("admin_session");
+    
+    // Clear cookie with same settings used to set it
+    res.clearCookie(SESSION_CONFIG.COOKIE_NAME, {
+      ...SESSION_CONFIG.COOKIE_OPTIONS,
+    });
+    
     return res.json({ success: true });
   });
 
   async function verifyAdminSession(req: Request): Promise<boolean> {
-    const sessionToken = req.cookies?.admin_session;
+    const sessionToken = req.cookies?.[SESSION_CONFIG.COOKIE_NAME];
     if (!sessionToken) return false;
     
     const [session] = await db.select().from(adminSessions)
-      .where(and(eq(adminSessions.sessionToken, sessionToken), gte(adminSessions.expiresAt, new Date())));
-    return !!session;
+      .where(and(
+        eq(adminSessions.sessionToken, sessionToken), 
+        gte(adminSessions.expiresAt, new Date())
+      ));
+    
+    if (!session) return false;
+    
+    // Check inactivity timeout (30 minutes)
+    if (session.lastActivityAt) {
+      const inactiveMs = Date.now() - session.lastActivityAt.getTime();
+      if (inactiveMs > SESSION_CONFIG.MAX_AGE_MS) {
+        // Session expired due to inactivity - clean it up
+        await db.delete(adminSessions).where(eq(adminSessions.sessionToken, sessionToken));
+        return false;
+      }
+    }
+    
+    // Update last activity time (sliding window)
+    await db.update(adminSessions)
+      .set({ lastActivityAt: new Date() })
+      .where(eq(adminSessions.sessionToken, sessionToken));
+    
+    return true;
   }
 
   app.get("/api/admin/verify", async (req: Request, res: Response) => {
@@ -637,15 +716,32 @@ export async function registerRoutes(
     return res.json({ authenticated: isValid });
   });
 
-  // Middleware helper
+  // Middleware helper with security logging
   async function requireAdmin(req: Request, res: Response): Promise<boolean> {
     const isValid = await verifyAdminSession(req);
     if (!isValid) {
+      const clientIp = getClientIpForSecurity(req);
+      const ipHash = hashForLogging(clientIp);
+      
+      logSecurityEvent({
+        type: "access_denied",
+        ipHash,
+        details: `Unauthorized admin access attempt: ${req.method} ${req.path}`,
+      });
+      
       res.status(401).json({ message: "Admin authentication required" });
       return false;
     }
     return true;
   }
+
+  // Security events endpoint for admin monitoring
+  app.get("/api/admin/security-events", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const events = getRecentSecurityEvents(100);
+    return res.json({ events });
+  });
 
   // =================== DATA STATUS PANEL ===================
   app.get("/api/admin/data-status", async (req: Request, res: Response) => {
