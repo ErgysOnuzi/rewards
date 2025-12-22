@@ -241,11 +241,14 @@ export default function Admin() {
 
   const processWithdrawal = useMutation({
     mutationFn: async ({ id, status }: { id: number; status: "approved" | "rejected" }) => {
-      return apiRequest("/api/admin/withdrawals/process", "POST", { id, status });
+      return apiRequest("POST", "/api/admin/withdrawals/process", { id, status });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/withdrawals"] });
       toast({ title: "Withdrawal processed" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to process withdrawal", description: err.message, variant: "destructive" });
     },
   });
 
@@ -259,6 +262,9 @@ export default function Admin() {
       refetchStatus();
       toast({ title: "Cache refreshed", description: `Loaded ${data.rowCount} rows` });
     },
+    onError: (err: Error) => {
+      toast({ title: "Failed to refresh cache", description: err.message, variant: "destructive" });
+    },
   });
 
   const userLookup = async () => {
@@ -270,32 +276,42 @@ export default function Admin() {
 
   const saveFlag = useMutation({
     mutationFn: async (flag: typeof newFlag) => {
-      return apiRequest("/api/admin/user-flags", "POST", flag);
+      return apiRequest("POST", "/api/admin/user-flags", flag);
     },
     onSuccess: () => {
       refetchFlags();
       setNewFlag({ stakeId: "", isBlacklisted: false, isAllowlisted: false, isDisputed: false, notes: "" });
       toast({ title: "Flag saved" });
     },
+    onError: (err: Error) => {
+      toast({ title: "Failed to save flag", description: err.message, variant: "destructive" });
+    },
   });
 
   const deleteFlag = useMutation({
     mutationFn: async (stakeId: string) => {
-      await fetch(`/api/admin/user-flags/${encodeURIComponent(stakeId)}`, { method: "DELETE", credentials: "include" });
+      const res = await fetch(`/api/admin/user-flags/${encodeURIComponent(stakeId)}`, { method: "DELETE", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to delete flag");
     },
     onSuccess: () => {
       refetchFlags();
       toast({ title: "Flag removed" });
     },
+    onError: (err: Error) => {
+      toast({ title: "Failed to remove flag", description: err.message, variant: "destructive" });
+    },
   });
 
   const updateToggle = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
-      return apiRequest("/api/admin/toggles", "POST", { key, value });
+      return apiRequest("POST", "/api/admin/toggles", { key, value });
     },
     onSuccess: () => {
       refetchToggles();
       toast({ title: "Toggle updated" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update toggle", description: err.message, variant: "destructive" });
     },
   });
 
