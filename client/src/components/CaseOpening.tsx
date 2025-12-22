@@ -253,8 +253,8 @@ export default function CaseOpening({
   const tickIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const reelRef = useRef<HTMLDivElement>(null);
 
-  const canSpin = ticketsRemaining > 0 && spinState === "idle";
-  const canBonusSpin = bonusStatus?.available && spinState === "idle";
+  const canSpin = ticketsRemaining > 0 && (spinState === "idle" || spinState === "result");
+  const canBonusSpin = bonusStatus?.available && (spinState === "idle" || spinState === "result");
 
   useEffect(() => {
     return () => {
@@ -295,9 +295,9 @@ export default function CaseOpening({
     resumeAudioContext();
     playSpinStart();
     
-    setSpinState("spinning");
     setShowResultModal(false);
     setHighlightedIndex(null);
+    setReelPosition(0);
     
     try {
       const result = await onSpin();
@@ -318,10 +318,12 @@ export default function CaseOpening({
       const centerOffset = containerWidth / 2 - itemWidth / 2;
       const finalPosition = -(targetIndex * itemWidth) + centerOffset;
       
-      setReelPosition(0);
+      setSpinState("spinning");
       
       requestAnimationFrame(() => {
-        setReelPosition(finalPosition);
+        requestAnimationFrame(() => {
+          setReelPosition(finalPosition);
+        });
       });
       
       let tickCount = 0;
@@ -373,9 +375,9 @@ export default function CaseOpening({
     resumeAudioContext();
     playSpinStart();
     setIsBonusSpin(true);
-    setSpinState("spinning");
     setShowResultModal(false);
     setHighlightedIndex(null);
+    setReelPosition(0);
 
     try {
       const result = await onBonusSpin();
@@ -396,10 +398,12 @@ export default function CaseOpening({
       const centerOffset = containerWidth / 2 - itemWidth / 2;
       const finalPosition = -(targetIndex * itemWidth) + centerOffset;
       
-      setReelPosition(0);
+      setSpinState("spinning");
       
       requestAnimationFrame(() => {
-        setReelPosition(finalPosition);
+        requestAnimationFrame(() => {
+          setReelPosition(finalPosition);
+        });
       });
       
       let tickCount = 0;
