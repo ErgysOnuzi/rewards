@@ -1,9 +1,8 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import HeroSection from "@/components/HeroSection";
 import StakeIdForm from "@/components/StakeIdForm";
 import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatus";
-import SpinWheel, { SpinResult, BonusStatus } from "@/components/SpinWheel";
-import PrizeTiers from "@/components/PrizeTiers";
+import CaseOpening, { CaseSpinResult, BonusStatus } from "@/components/CaseOpening";
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 
@@ -71,7 +70,7 @@ export default function Home() {
     }
   };
 
-  const handleSpin = async (): Promise<SpinResult> => {
+  const handleSpin = async (): Promise<CaseSpinResult> => {
     if (!ticketData) {
       throw new Error("No ticket data available");
     }
@@ -90,17 +89,17 @@ export default function Home() {
 
     return {
       result: data.result,
-      prizeLabel: data.prize_label || undefined,
+      prizeLabel: data.prize_label || "$0",
       prizeValue: data.prize_value || 0,
+      prizeColor: data.prize_color || "grey",
       ticketsTotal: data.tickets_total,
       ticketsUsedAfter: data.tickets_used_after,
       ticketsRemainingAfter: data.tickets_remaining_after,
       walletBalance: data.wallet_balance || 0,
-      spinBalances: data.spin_balances || { bronze: 0, silver: 0, gold: 0 },
     };
   };
 
-  const handleSpinComplete = (result: SpinResult) => {
+  const handleSpinComplete = (result: CaseSpinResult) => {
     if (ticketData) {
       setTicketData({
         ...ticketData,
@@ -108,7 +107,6 @@ export default function Home() {
         ticketsUsed: result.ticketsUsedAfter,
         ticketsRemaining: result.ticketsRemainingAfter,
         walletBalance: result.walletBalance,
-        spinBalances: result.spinBalances,
       });
     }
 
@@ -126,77 +124,6 @@ export default function Home() {
       description: error.message,
       variant: "destructive",
     });
-  };
-
-  const handlePurchase = async (tier: "bronze" | "silver" | "gold", quantity: number) => {
-    if (!ticketData) return;
-
-    try {
-      const response = await fetch("/api/spins/purchase", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stake_id: ticketData.stakeId, tier, quantity }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Purchase failed");
-      }
-
-      setTicketData({
-        ...ticketData,
-        walletBalance: data.wallet_balance,
-        spinBalances: data.spin_balances,
-      });
-
-      toast({
-        title: "Purchase Successful",
-        description: `Bought ${quantity} ${tier} spin(s) for $${data.cost}`,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Purchase failed";
-      toast({
-        title: "Purchase Failed",
-        description: message,
-        variant: "destructive",
-      });
-    }
-  };
-
-  const handleConvert = async (fromTier: "bronze" | "silver", toTier: "silver" | "gold", quantity: number) => {
-    if (!ticketData) return;
-
-    try {
-      const response = await fetch("/api/spins/convert", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stake_id: ticketData.stakeId, from_tier: fromTier, to_tier: toTier, quantity }),
-      });
-
-      const data = await response.json();
-
-      if (!response.ok) {
-        throw new Error(data.message || "Conversion failed");
-      }
-
-      setTicketData({
-        ...ticketData,
-        spinBalances: data.spin_balances,
-      });
-
-      toast({
-        title: "Conversion Successful",
-        description: `Converted to ${quantity} ${toTier} spin(s)`,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Conversion failed";
-      toast({
-        title: "Conversion Failed",
-        description: message,
-        variant: "destructive",
-      });
-    }
   };
 
   const handleBonusSpin = async () => {
@@ -285,24 +212,19 @@ export default function Home() {
             <div className="space-y-8 animate-fade-in-up">
               <TicketStatus 
                 data={ticketData}
-                onPurchase={handlePurchase}
-                onConvert={handleConvert}
                 onWithdraw={handleWithdraw}
               />
               
-              <div className="grid md:grid-cols-2 gap-6">
-                <SpinWheel
-                  ticketsRemaining={ticketData.ticketsRemaining}
-                  stakeId={ticketData.stakeId}
-                  onSpin={handleSpin}
-                  onBonusSpin={handleBonusSpin}
-                  onSpinComplete={handleSpinComplete}
-                  onSpinError={handleSpinError}
-                  bonusStatus={bonusStatus || undefined}
-                  onBonusUsed={handleBonusUsed}
-                />
-                <PrizeTiers selectedTier="bronze" />
-              </div>
+              <CaseOpening
+                ticketsRemaining={ticketData.ticketsRemaining}
+                stakeId={ticketData.stakeId}
+                onSpin={handleSpin}
+                onBonusSpin={handleBonusSpin}
+                onSpinComplete={handleSpinComplete}
+                onSpinError={handleSpinError}
+                bonusStatus={bonusStatus || undefined}
+                onBonusUsed={handleBonusUsed}
+              />
             </div>
           )}
         </div>

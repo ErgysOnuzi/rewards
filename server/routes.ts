@@ -12,7 +12,7 @@ import type {
   LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
-import { getWagerRow, calculateTickets, determineSpinResult, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
+import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited } from "./lib/rateLimit";
 import { config } from "./lib/config";
