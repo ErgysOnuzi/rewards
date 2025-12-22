@@ -399,9 +399,10 @@ export async function registerRoutes(
     }
   });
 
-  app.get("/api/admin/logs", async (_req: Request, res: Response) => {
+  app.get("/api/admin/logs", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
     try {
-      // Get logs from Google Sheets via countSpinsForStakeId
       const logs = await db.select().from(spinLogs).orderBy(desc(spinLogs.timestamp)).limit(100);
       const totalCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs);
       const winCount = await db.select({ count: sql<number>`count(*)` }).from(spinLogs).where(eq(spinLogs.result, "WIN"));
@@ -482,7 +483,9 @@ export async function registerRoutes(
   });
 
   // Admin: Get all withdrawal requests
-  app.get("/api/admin/withdrawals", async (_req: Request, res: Response) => {
+  app.get("/api/admin/withdrawals", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
     try {
       const requests = await db.select().from(withdrawalRequests).orderBy(desc(withdrawalRequests.createdAt)).limit(100);
       return res.json({ withdrawals: requests });
@@ -494,6 +497,8 @@ export async function registerRoutes(
 
   // Admin: Process withdrawal request
   app.post("/api/admin/withdrawals/process", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
     try {
       const parsed = processWithdrawalSchema.parse(req.body);
       const { id, status, admin_notes } = parsed;
