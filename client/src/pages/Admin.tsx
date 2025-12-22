@@ -64,6 +64,8 @@ interface DataStatus {
   isExpired: boolean;
   duplicateCount: number;
   duplicates: string[];
+  backgroundRefreshActive: boolean;
+  nextRefreshIn: number;
 }
 
 interface RateStats {
@@ -463,6 +465,13 @@ export default function Admin() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-muted-foreground">Status:</span>
                     <Badge variant={dataStatus?.isExpired ? "destructive" : "default"}>{dataStatus?.isExpired ? "Expired" : "Fresh"}</Badge>
+                  </div>
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="text-muted-foreground">Auto-Refresh:</span>
+                    <Badge variant={dataStatus?.backgroundRefreshActive ? "default" : "secondary"}>{dataStatus?.backgroundRefreshActive ? "Active" : "Inactive"}</Badge>
+                    {dataStatus?.backgroundRefreshActive && dataStatus.nextRefreshIn > 0 && (
+                      <span className="text-xs text-muted-foreground">(next in {Math.round(dataStatus.nextRefreshIn / 1000)}s)</span>
+                    )}
                   </div>
                   <div><span className="text-muted-foreground">Duplicates:</span> {dataStatus?.duplicateCount ?? 0}</div>
                 </div>

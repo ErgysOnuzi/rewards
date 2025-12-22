@@ -55,7 +55,46 @@ async function getSheetsClient() {
 // Cache for sheet data to reduce API calls
 let wagerDataCache: Map<string, WagerRow> | null = null;
 let cacheTimestamp: number = 0;
-const CACHE_TTL_MS = 1 * 60 * 1000; // 1 minute
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+let backgroundRefreshInterval: NodeJS.Timeout | null = null;
+
+// Start automatic background refresh every 5 minutes
+export function startBackgroundRefresh() {
+  if (backgroundRefreshInterval) {
+    clearInterval(backgroundRefreshInterval);
+  }
+  
+  // Initial load
+  loadWagerDataCache().then(cache => {
+    wagerDataCache = cache;
+    cacheTimestamp = Date.now();
+    console.log(`[Sheets] Initial load: ${cache.size} users from wager sheet`);
+  }).catch(err => {
+    console.error("[Sheets] Failed initial load:", err);
+  });
+  
+  // Schedule refresh every 5 minutes
+  backgroundRefreshInterval = setInterval(async () => {
+    try {
+      const newCache = await loadWagerDataCache();
+      wagerDataCache = newCache;
+      cacheTimestamp = Date.now();
+      console.log(`[Sheets] Background refresh: ${newCache.size} users loaded at ${new Date().toISOString()}`);
+    } catch (err) {
+      console.error("[Sheets] Background refresh failed:", err);
+    }
+  }, CACHE_TTL_MS);
+  
+  console.log(`[Sheets] Background refresh started (every ${CACHE_TTL_MS / 1000 / 60} minutes)`);
+}
+
+export function stopBackgroundRefresh() {
+  if (backgroundRefreshInterval) {
+    clearInterval(backgroundRefreshInterval);
+    backgroundRefreshInterval = null;
+    console.log("[Sheets] Background refresh stopped");
+  }
+}
 
 // Find column index by header name (case-insensitive)
 function findColumnIndex(headers: string[], columnName: string): number {
@@ -186,9 +225,12 @@ export function getCacheStatus(): {
   cacheTtlMs: number;
   cacheAge: number;
   isExpired: boolean;
+  backgroundRefreshActive: boolean;
+  nextRefreshIn: number;
 } {
   const now = Date.now();
   const cacheAge = cacheTimestamp ? now - cacheTimestamp : 0;
+  const nextRefreshIn = Math.max(0, CACHE_TTL_MS - cacheAge);
   return {
     loaded: wagerDataCache !== null,
     rowCount: wagerDataCache?.size || 0,
@@ -196,6 +238,8 @@ export function getCacheStatus(): {
     cacheTtlMs: CACHE_TTL_MS,
     cacheAge,
     isExpired: !cacheTimestamp || cacheAge > CACHE_TTL_MS,
+    backgroundRefreshActive: backgroundRefreshInterval !== null,
+    nextRefreshIn,
   };
 }
 
