@@ -2,65 +2,57 @@ import { z } from "zod";
 import { pgTable, text, integer, real, timestamp, serial, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
-// Spin tier types
-export type SpinTier = "bronze" | "silver" | "gold";
-
-// Prize definition with value and probability
-export interface PrizeOption {
+// Case prize definition with value, probability, and rarity color
+export interface CasePrize {
   value: number;       // Dollar value of the prize
-  probability: number; // Probability of winning this prize (0-1)
+  probability: number; // Probability as percentage (must total 100%)
   label: string;       // Display label
+  color: "grey" | "lightblue" | "green" | "red" | "gold"; // Rarity color
 }
 
-// Tier configuration with multiple prize options per tier
-// Each tier has different prize levels with varying odds
-// Total win probability is the sum of all prize probabilities
-export const TIER_CONFIG = {
-  bronze: {
-    cost: 5,
-    prizes: [
-      { value: 5, probability: 0.008, label: "$5 Prize" },      // 0.8% chance
-      { value: 10, probability: 0.0015, label: "$10 Prize" },   // 0.15% chance
-      { value: 25, probability: 0.0005, label: "$25 Prize" },   // 0.05% chance
-    ] as PrizeOption[],
-    // Total win rate: 1% (0.8% + 0.15% + 0.05%)
-  },
-  silver: {
-    cost: 25,
-    prizes: [
-      { value: 25, probability: 0.003, label: "$25 Prize" },    // 0.3% chance
-      { value: 50, probability: 0.0008, label: "$50 Prize" },   // 0.08% chance
-      { value: 100, probability: 0.0002, label: "$100 Prize" }, // 0.02% chance
-    ] as PrizeOption[],
-    // Total win rate: 0.4%
-  },
-  gold: {
-    cost: 100,
-    prizes: [
-      { value: 100, probability: 0.003, label: "$100 Prize" },   // 0.3% chance
-      { value: 250, probability: 0.0015, label: "$250 Prize" },  // 0.15% chance
-      { value: 500, probability: 0.0005, label: "$500 Prize" },  // 0.05% chance
-    ] as PrizeOption[],
-    // Total win rate: 0.5%
-  },
+// Case prize configuration - single case with weighted probabilities
+// Probabilities must total 100%
+export const CASE_PRIZES: CasePrize[] = [
+  { value: 0, probability: 87.5, label: "$0", color: "grey" },
+  { value: 2, probability: 8.0, label: "$2", color: "lightblue" },
+  { value: 5, probability: 3.5, label: "$5", color: "green" },
+  { value: 25, probability: 0.8, label: "$25", color: "red" },
+  { value: 50, probability: 0.2, label: "$50", color: "gold" },
+];
+
+// Color mapping for CSS classes
+export const PRIZE_COLORS = {
+  grey: { bg: "bg-gray-500", text: "text-gray-100", border: "border-gray-400" },
+  lightblue: { bg: "bg-blue-400", text: "text-blue-100", border: "border-blue-300" },
+  green: { bg: "bg-green-500", text: "text-green-100", border: "border-green-400" },
+  red: { bg: "bg-red-500", text: "text-red-100", border: "border-red-400" },
+  gold: { bg: "bg-yellow-500", text: "text-yellow-100", border: "border-yellow-400" },
 } as const;
 
-// Helper to get total win probability for a tier
-export function getTierWinProbability(tier: SpinTier): number {
-  return TIER_CONFIG[tier].prizes.reduce((sum, p) => sum + p.probability, 0);
+// Validate that probabilities total 100%
+export function validatePrizeProbabilities(prizes: CasePrize[]): boolean {
+  const total = prizes.reduce((sum, p) => sum + p.probability, 0);
+  return Math.abs(total - 100) < 0.01; // Allow small floating point error
 }
 
-// Legacy compatibility - get the minimum prize value for a tier
-export function getTierMinPrize(tier: SpinTier): number {
-  return TIER_CONFIG[tier].prizes[0]?.value || 0;
+// Weighted random selection using cumulative probability
+export function selectCasePrize(prizes: CasePrize[] = CASE_PRIZES): CasePrize {
+  const random = Math.random() * 100;
+  let cumulative = 0;
+  
+  for (const prize of prizes) {
+    cumulative += prize.probability;
+    if (random <= cumulative) {
+      return prize;
+    }
+  }
+  
+  // Fallback to first prize (should never happen if probabilities sum to 100)
+  return prizes[0];
 }
 
-// Conversion rates: 2 bronze = 1 silver, 5 silver = 1 gold
-// This gives: 100 bronze = 50 silver = 10 gold
-export const CONVERSION_RATES = {
-  bronze_to_silver: 2,
-  silver_to_gold: 5,
-} as const;
+// Legacy type for backwards compatibility
+export type SpinTier = "bronze" | "silver" | "gold";
 
 // Database tables
 export const demoUsers = pgTable("demo_users", {
@@ -79,6 +71,7 @@ export const spinLogs = pgTable("spin_logs", {
   result: text("result").notNull(), // "WIN" or "LOSE"
   prizeLabel: text("prize_label").notNull(),
   prizeValue: integer("prize_value").default(0).notNull(), // Dollar amount won
+  prizeColor: text("prize_color"), // "grey", "lightblue", "green", "red", "gold"
   ipHash: text("ip_hash"),
 });
 
@@ -240,9 +233,9 @@ export const lookupRequestSchema = z.object({
   stake_id: stakeIdSchema,
 });
 
+// Simplified spin request - just stake_id, no tiers
 export const spinRequestSchema = z.object({
   stake_id: stakeIdSchema,
-  tier: z.enum(["bronze", "silver", "gold"]).optional().default("bronze"),
 });
 
 export const convertSpinsRequestSchema = z.object({
@@ -327,9 +320,8 @@ export interface SpinResponse {
   result: "WIN" | "LOSE";
   prize_label: string;
   prize_value: number;
-  tier: SpinTier;
+  prize_color: "grey" | "lightblue" | "green" | "red" | "gold";
   wallet_balance: number;
-  spin_balances: SpinBalances;
 }
 
 export interface ConvertSpinsResponse {

@@ -1,0 +1,146 @@
+REPLIT AGENT PROMPT — EDITS ONLY (NO REBUILD)
+
+You are working on an existing LukeRewards website.
+Do not rebuild, do not change stack, auth, hosting, or database choice unless strictly required.
+Only implement the edits below.
+
+⸻
+
+OBJECTIVE
+
+Replace the current wheel spin with a single Case-style spin (Steam / Stake case opening look).
+Logic, probabilities, and flow are defined below.
+Everything else stays as-is.
+
+⸻
+
+CORE LOGIC (LOCK THIS IN)
+
+Spin Structure
+	•	ONE case only
+	•	1 ticket = 1 spin
+	•	No bronze / silver / gold tiers at the spin level
+	•	Tiers exist only visually as rarity colors
+
+Prize Table (DEFAULT)
+
+Use exactly this table:
+
+Prize	Chance	Color
+$0	87.5%	Grey
+$2	8.0%	Light Blue
+$5	3.5%	Green
+$25	0.8%	Red
+$50	0.2%	Gold
+
+	•	Probabilities must total 100%
+	•	Weighted random selection on backend
+	•	Frontend animation must always land on backend result
+
+⸻
+
+UI / UX CHANGES
+
+REMOVE
+	•	Old wheel / roulette visuals
+	•	Any bronze / silver / gold spin selector
+
+ADD / MODIFY
+	•	Replace wheel with CASE OPENING animation
+	•	Horizontal reel
+	•	40–60 items scrolling
+	•	Colors match rarity
+	•	Deceleration easing
+	•	Final item centered
+
+Case Visual Rules
+	•	Grey dominates reel visually
+	•	Red & Gold appear very rarely
+	•	Gold should feel “blink and you miss it”
+	•	Animation duration ~3–5 seconds
+
+Result Modal
+
+After spin:
+	•	Prize amount
+	•	Color badge
+	•	Tickets remaining
+	•	“Spin again” (disabled if 0 tickets)
+
+⸻
+
+BUSINESS RULES
+
+Tickets
+	•	Ticket balance already exists → reuse
+	•	Deduct 1 ticket per spin
+	•	Block spin if tickets = 0
+
+Winnings
+	•	Add prize amount to user balance
+	•	Store every spin in DB:
+	•	userId
+	•	prize
+	•	color
+	•	timestamp
+
+⸻
+
+ADMIN EDITS (MINIMAL)
+
+Probability Editor
+	•	Single table editor for the prize list above
+	•	Validation:
+	•	Total probability must = 100%
+	•	No tier selector
+	•	No multiple cases
+
+Notes Section (Admin-only text)
+
+Add static note:
+
+Affiliate earning rate ≈ $1.31 per $1,000 wagered
+Ticket-to-wager conversion must respect this margin.
+
+(No calculations needed here, just display.)
+
+⸻
+
+BACKEND LOGIC (EDIT, NOT REWRITE)
+
+Spin Endpoint
+	•	Validate ticket count
+	•	Generate weighted result
+	•	Deduct ticket
+	•	Credit winnings
+	•	Return result to frontend
+
+Weighted Selection
+	•	Use cumulative probability method
+	•	Deterministic per request
+	•	No client-side RNG
+
+⸻
+
+STRICT CONSTRAINTS
+	•	❌ No new game modes
+	•	❌ No new cases
+	•	❌ No bronze/silver/gold selector
+	•	❌ No redesign outside the spin area
+	•	✅ Case look only
+	•	✅ One table, one case, one spin logic
+
+⸻
+
+FINAL CHECKLIST
+	•	Wheel fully removed
+	•	Case animation works
+	•	Probabilities exact
+	•	Tickets enforced
+	•	Spins logged
+	•	Admin can tweak percentages
+	•	Visual rarity matches probability
+
+Implement only what is written.
+Do not add features.
+Do not refactor unrelated code.

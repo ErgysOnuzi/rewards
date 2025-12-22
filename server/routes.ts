@@ -6,7 +6,7 @@ import {
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
   userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState,
-  TIER_CONFIG, CONVERSION_RATES, type SpinTier, type SpinBalances
+  CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances
 } from "@shared/schema";
 import type { 
   LookupResponse, SpinResponse, ErrorResponse,
@@ -174,7 +174,6 @@ export async function registerRoutes(
 
       const parsed = spinRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
-      const tier: SpinTier = parsed.tier || "bronze";
 
       // Check stake ID rate limit
       if (isStakeIdRateLimited(stakeId)) {
@@ -195,71 +194,46 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
-      // Check if user has purchased tier spins first
-      const currentSpinBalances = await getSpinBalances(stakeId);
-      const hasTierSpin = currentSpinBalances[tier] > 0;
-
-      // For free spins (bronze only, from wager tickets)
+      // Calculate tickets from wager amount (1 ticket per $1000 wagered)
       const ticketsTotal = calculateTickets(wagerRow.wageredAmount);
       const ticketsUsedBefore = await countSpinsForStakeId(stakeId);
-      const freeTicketsRemaining = ticketsTotal - ticketsUsedBefore;
+      const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
 
-      // Determine spin source
-      let usePurchasedSpin = hasTierSpin;
-      let useFreeTicket = !hasTierSpin && tier === "bronze" && freeTicketsRemaining > 0;
-
-      if (!usePurchasedSpin && !useFreeTicket) {
-        if (tier !== "bronze") {
-          return res.status(403).json({ message: `No ${tier} spins available. Purchase or convert spins first.` } as ErrorResponse);
-        }
+      // Check if user has tickets
+      if (ticketsRemaining <= 0) {
         return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
       }
 
-      // Consume the spin
-      let spinNumber = ticketsUsedBefore + 1;
-      let ticketsUsedAfter = ticketsUsedBefore;
-      let ticketsRemainingAfter = freeTicketsRemaining;
+      // Use weighted random selection for case prize
+      const prize = selectCasePrize(CASE_PRIZES);
+      const isWin = prize.value > 0;
+      const spinNumber = ticketsUsedBefore + 1;
+      const ticketsUsedAfter = spinNumber;
+      const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
 
-      if (usePurchasedSpin) {
-        // Deduct from purchased spin balance
-        await updateSpinBalance(stakeId, tier, -1);
-      } else {
-        // Use free ticket - will be logged to sheets
-        ticketsUsedAfter = ticketsUsedBefore + 1;
-        ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
-      }
-
-      const spinResult = determineSpinResult(tier);
-      const prizeLabel = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.label : "";
-      const prizeValue = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.value : 0;
-
-      // Log spin to database (only for free ticket spins)
-      if (!usePurchasedSpin) {
-        await db.insert(spinLogs).values({
-          stakeId: wagerRow.stakeId,
-          wageredAmount: wagerRow.wageredAmount,
-          spinNumber,
-          result: spinResult.outcome,
-          prizeLabel,
-          prizeValue,
-          ipHash,
-        });
-      }
+      // Log spin to database
+      await db.insert(spinLogs).values({
+        stakeId: wagerRow.stakeId,
+        wageredAmount: wagerRow.wageredAmount,
+        spinNumber,
+        result: isWin ? "WIN" : "LOSE",
+        prizeLabel: prize.label,
+        prizeValue: prize.value,
+        prizeColor: prize.color,
+        ipHash,
+      });
 
       // Add winnings to wallet if won
       let walletBalance = await getWalletBalance(stakeId);
-      if (spinResult.outcome === "WIN" && prizeValue > 0) {
-        walletBalance = await updateWalletBalance(stakeId, prizeValue);
+      if (isWin && prize.value > 0) {
+        walletBalance = await updateWalletBalance(stakeId, prize.value);
         await db.insert(walletTransactions).values({
           stakeId,
           type: "win",
-          amount: prizeValue,
-          tier,
-          description: `Won ${tier} spin: ${prizeLabel}`,
+          amount: prize.value,
+          description: `Case opening win: ${prize.label}`,
         });
       }
-
-      const spinBalances = await getSpinBalances(stakeId);
 
       const response: SpinResponse = {
         stake_id: wagerRow.stakeId,
@@ -268,12 +242,11 @@ export async function registerRoutes(
         tickets_used_before: ticketsUsedBefore,
         tickets_used_after: ticketsUsedAfter,
         tickets_remaining_after: ticketsRemainingAfter,
-        result: spinResult.outcome,
-        prize_label: prizeLabel,
-        prize_value: prizeValue,
-        tier,
+        result: isWin ? "WIN" : "LOSE",
+        prize_label: prize.label,
+        prize_value: prize.value,
+        prize_color: prize.color,
         wallet_balance: walletBalance,
-        spin_balances: spinBalances,
       };
 
       return res.json(response);
@@ -345,10 +318,9 @@ export async function registerRoutes(
         }
       }
 
-      // Determine result using same house-favored odds as bronze tier
-      const spinResult = determineSpinResult("bronze");
-      const prizeValue = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.value : 0;
-      const prizeLabel = spinResult.outcome === "WIN" && spinResult.prize ? spinResult.prize.label : "No prize";
+      // Use case prize system for bonus spin
+      const prize = selectCasePrize(CASE_PRIZES);
+      const isWin = prize.value > 0;
 
       // Update last bonus spin time
       await db.update(userState).set({ 
@@ -365,29 +337,31 @@ export async function registerRoutes(
         stakeId,
         wageredAmount: wagerRow.wageredAmount,
         spinNumber,
-        result: spinResult.outcome,
-        prizeLabel: `[BONUS] ${prizeLabel}`,
-        prizeValue,
+        result: isWin ? "WIN" : "LOSE",
+        prizeLabel: `[BONUS] ${prize.label}`,
+        prizeValue: prize.value,
+        prizeColor: prize.color,
         ipHash,
       });
 
       // Add winnings to wallet if won
       let walletBalance = await getWalletBalance(stakeId);
-      if (spinResult.outcome === "WIN" && prizeValue > 0) {
-        walletBalance = await updateWalletBalance(stakeId, prizeValue);
+      if (isWin && prize.value > 0) {
+        walletBalance = await updateWalletBalance(stakeId, prize.value);
         await db.insert(walletTransactions).values({
           stakeId,
           type: "win",
-          amount: prizeValue,
-          description: `Daily bonus win: ${prizeLabel}`,
+          amount: prize.value,
+          description: `Daily bonus win: ${prize.label}`,
         });
       }
 
       return res.json({
         stake_id: stakeId,
-        result: spinResult.outcome,
-        prize_label: prizeLabel,
-        prize_value: prizeValue,
+        result: isWin ? "WIN" : "LOSE",
+        prize_label: prize.label,
+        prize_value: prize.value,
+        prize_color: prize.color,
         wallet_balance: walletBalance,
         is_bonus: true,
         next_bonus_at: new Date(now.getTime() + cooldownMs).toISOString(),
