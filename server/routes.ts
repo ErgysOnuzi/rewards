@@ -549,6 +549,27 @@ export async function registerRoutes(
     });
   });
 
+  // Health check endpoint to verify database connectivity
+  app.get("/api/health", async (_req: Request, res: Response) => {
+    try {
+      // Test database connection by checking if admin_sessions table exists
+      const result = await db.execute(sql`SELECT COUNT(*) as count FROM admin_sessions`);
+      return res.json({ 
+        status: "healthy", 
+        database: "connected",
+        admin_sessions_table: "exists",
+        env: process.env.NODE_ENV || "unknown"
+      });
+    } catch (err: any) {
+      return res.json({ 
+        status: "unhealthy", 
+        database: "error",
+        error: err?.message,
+        hint: "Run 'npm run db:push' in production shell to create tables"
+      });
+    }
+  });
+
   // =================== ADMIN AUTHENTICATION ===================
   const adminLoginSchema = z.object({
     password: z.string().min(1),
@@ -569,7 +590,15 @@ export async function registerRoutes(
       const sessionToken = crypto.randomBytes(32).toString("hex");
       const expiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
-      await db.insert(adminSessions).values({ sessionToken, expiresAt });
+      try {
+        await db.insert(adminSessions).values({ sessionToken, expiresAt });
+      } catch (dbErr: any) {
+        console.error("Database error during login:", dbErr);
+        return res.status(500).json({ 
+          message: "Database error - tables may not exist. Run 'npm run db:push' in production shell.",
+          error: dbErr?.message 
+        });
+      }
       
       res.cookie("admin_session", sessionToken, {
         httpOnly: true,
