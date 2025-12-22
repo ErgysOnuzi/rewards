@@ -64,21 +64,6 @@ async function getSpinBalances(stakeId: string): Promise<SpinBalances> {
   return result;
 }
 
-async function updateSpinBalance(stakeId: string, tier: SpinTier, delta: number): Promise<number> {
-  const [existing] = await db.select().from(userSpinBalances)
-    .where(and(eq(userSpinBalances.stakeId, stakeId), eq(userSpinBalances.tier, tier)));
-  if (existing) {
-    const newBalance = Math.max(0, existing.balance + delta);
-    await db.update(userSpinBalances)
-      .set({ balance: newBalance })
-      .where(and(eq(userSpinBalances.stakeId, stakeId), eq(userSpinBalances.tier, tier)));
-    return newBalance;
-  } else if (delta > 0) {
-    await db.insert(userSpinBalances).values({ stakeId, tier, balance: delta });
-    return delta;
-  }
-  return 0;
-}
 
 async function getPendingWithdrawals(stakeId: string): Promise<number> {
   const result = await db.select({ sum: sql<number>`COALESCE(SUM(amount), 0)` })
@@ -441,126 +426,6 @@ export async function registerRoutes(
     }
   });
 
-  // Convert spins between tiers (5 bronze = 1 silver, 10 silver = 1 gold)
-  app.post("/api/spins/convert", async (req: Request, res: Response) => {
-    try {
-      const parsed = convertSpinsRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
-      const fromTier = parsed.from_tier as SpinTier;
-      const toTier = parsed.to_tier as SpinTier;
-      const quantity = parsed.quantity;
-
-      // Check blacklist - fail closed on error
-      const blacklistCheck = await checkUserBlacklist(stakeId);
-      if (blacklistCheck.error) {
-        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
-      }
-      if (blacklistCheck.blacklisted) {
-        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
-      }
-
-      // Validate conversion path
-      if (fromTier === "bronze" && toTier !== "silver") {
-        return res.status(400).json({ message: "Bronze can only convert to Silver" } as ErrorResponse);
-      }
-      if (fromTier === "silver" && toTier !== "gold") {
-        return res.status(400).json({ message: "Silver can only convert to Gold" } as ErrorResponse);
-      }
-
-      const conversionRate = fromTier === "bronze" ? CONVERSION_RATES.bronze_to_silver : CONVERSION_RATES.silver_to_gold;
-      const requiredSpins = quantity * conversionRate;
-
-      // Check balance
-      const currentBalances = await getSpinBalances(stakeId);
-      if (currentBalances[fromTier] < requiredSpins) {
-        return res.status(400).json({ 
-          message: `Not enough ${fromTier} spins. Need ${requiredSpins}, have ${currentBalances[fromTier]}` 
-        } as ErrorResponse);
-      }
-
-      // Perform conversion
-      await updateSpinBalance(stakeId, fromTier, -requiredSpins);
-      await updateSpinBalance(stakeId, toTier, quantity);
-
-      const newBalances = await getSpinBalances(stakeId);
-
-      const response: ConvertSpinsResponse = {
-        success: true,
-        from_tier: fromTier,
-        to_tier: toTier,
-        quantity_converted: quantity,
-        spin_balances: newBalances,
-      };
-
-      return res.json(response);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
-      }
-      console.error("Convert error:", err);
-      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
-    }
-  });
-
-  // Purchase spins with wallet balance
-  app.post("/api/spins/purchase", async (req: Request, res: Response) => {
-    try {
-      const parsed = purchaseSpinsRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
-      const tier = parsed.tier as SpinTier;
-      const quantity = parsed.quantity;
-
-      // Check blacklist - fail closed on error
-      const blacklistCheck = await checkUserBlacklist(stakeId);
-      if (blacklistCheck.error) {
-        return res.status(500).json({ message: blacklistCheck.error } as ErrorResponse);
-      }
-      if (blacklistCheck.blacklisted) {
-        return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
-      }
-
-      const cost = TIER_CONFIG[tier].cost * quantity;
-      const walletBalance = await getWalletBalance(stakeId);
-
-      if (walletBalance < cost) {
-        return res.status(400).json({ 
-          message: `Not enough funds. Need $${cost}, have $${walletBalance}` 
-        } as ErrorResponse);
-      }
-
-      // Deduct from wallet and add spins
-      const newWalletBalance = await updateWalletBalance(stakeId, -cost);
-      await updateSpinBalance(stakeId, tier, quantity);
-      
-      // Log transaction
-      await db.insert(walletTransactions).values({
-        stakeId,
-        type: "purchase",
-        amount: -cost,
-        tier,
-        description: `Purchased ${quantity} ${tier} spin(s) for $${cost}`,
-      });
-
-      const newBalances = await getSpinBalances(stakeId);
-
-      const response: PurchaseSpinsResponse = {
-        success: true,
-        tier,
-        quantity,
-        cost,
-        wallet_balance: newWalletBalance,
-        spin_balances: newBalances,
-      };
-
-      return res.json(response);
-    } catch (err) {
-      if (err instanceof ZodError) {
-        return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" } as ErrorResponse);
-      }
-      console.error("Purchase error:", err);
-      return res.status(500).json({ message: "Internal server error" } as ErrorResponse);
-    }
-  });
 
   // Request withdrawal to Stake account
   app.post("/api/wallet/withdraw", async (req: Request, res: Response) => {
@@ -675,8 +540,7 @@ export async function registerRoutes(
       configured: true,
       siteName: config.siteName,
       prizeLabel: config.prizeLabel,
-      tierConfig: TIER_CONFIG,
-      conversionRates: CONVERSION_RATES,
+      casePrizes: CASE_PRIZES,
     });
   });
 
