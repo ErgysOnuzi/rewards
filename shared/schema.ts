@@ -72,6 +72,7 @@ export const spinLogs = pgTable("spin_logs", {
   prizeLabel: text("prize_label").notNull(),
   prizeValue: integer("prize_value").default(0).notNull(), // Dollar amount won
   prizeColor: text("prize_color"), // "grey", "lightblue", "green", "red", "gold"
+  isBonus: boolean("is_bonus").default(false).notNull(), // True for daily bonus spins
   ipHash: text("ip_hash"),
 });
 

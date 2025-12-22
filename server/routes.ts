@@ -28,7 +28,7 @@ async function countSpinsForStakeId(stakeId: string): Promise<number> {
     .from(spinLogs)
     .where(and(
       eq(spinLogs.stakeId, stakeId),
-      sql`${spinLogs.prizeLabel} NOT LIKE '[BONUS]%'`
+      eq(spinLogs.isBonus, false)
     ));
   return Number(result[0]?.count || 0);
 }
@@ -223,6 +223,7 @@ export async function registerRoutes(
         prizeLabel: prize.label,
         prizeValue: prize.value,
         prizeColor: prize.color,
+        isBonus: false,
         ipHash,
       });
 
@@ -344,6 +345,7 @@ export async function registerRoutes(
         prizeLabel: `[BONUS] ${prize.label}`,
         prizeValue: prize.value,
         prizeColor: prize.color,
+        isBonus: true,
         ipHash,
       });
 
