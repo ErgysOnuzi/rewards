@@ -7,6 +7,17 @@ async function throwIfResNotOk(res: Response) {
   }
 }
 
+// Safe JSON parsing for Safari compatibility
+// Safari throws "The string did not match the expected pattern" when parsing non-JSON
+export async function safeJsonParse(response: Response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: text || response.statusText || "Unknown error" };
+  }
+}
+
 export async function apiRequest(
   method: string,
   url: string,

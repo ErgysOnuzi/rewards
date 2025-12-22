@@ -16,7 +16,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { queryClient, apiRequest } from "@/lib/queryClient";
+import { queryClient, apiRequest, safeJsonParse } from "@/lib/queryClient";
 
 interface SpinLog {
   timestamp: string;

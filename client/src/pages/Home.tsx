@@ -5,6 +5,7 @@ import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatu
 import CaseOpening, { CaseSpinResult, BonusStatus } from "@/components/CaseOpening";
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
+import { safeJsonParse } from "@/lib/queryClient";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -20,7 +21,7 @@ export default function Home() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ stake_id: stakeId }),
       });
-      const data = await response.json();
+      const data = await safeJsonParse(response);
       setBonusStatus({
         available: data.available,
         remainingMs: data.remaining_ms,
@@ -42,7 +43,7 @@ export default function Home() {
         body: JSON.stringify({ stake_id: stakeId }),
       });
 
-      const data = await response.json();
+      const data = await safeJsonParse(response);
 
       if (!response.ok) {
         throw new Error(data.message || "Failed to lookup Stake ID");
@@ -88,7 +89,7 @@ export default function Home() {
       body: JSON.stringify({ stake_id: ticketData.stakeId }),
     });
 
-    const data = await response.json();
+    const data = await safeJsonParse(response);
 
     if (!response.ok) {
       // Revert on error
@@ -148,7 +149,7 @@ export default function Home() {
       body: JSON.stringify({ stake_id: ticketData.stakeId }),
     });
 
-    const data = await response.json();
+    const data = await safeJsonParse(response);
 
     if (!response.ok) {
       throw new Error(data.message || "Bonus spin failed");
@@ -184,7 +185,7 @@ export default function Home() {
         body: JSON.stringify({ stake_id: ticketData.stakeId, amount }),
       });
 
-      const data = await response.json();
+      const data = await safeJsonParse(response);
 
       if (!response.ok) {
         throw new Error(data.message || "Withdrawal failed");
