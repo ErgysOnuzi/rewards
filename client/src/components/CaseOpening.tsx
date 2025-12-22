@@ -44,6 +44,25 @@ interface Confetti {
   color: string;
   delay: number;
   duration: number;
+  shape: "square" | "circle" | "triangle" | "star";
+  size: number;
+  rotation: number;
+  swingAmplitude: number;
+}
+
+interface Sparkle {
+  id: number;
+  x: number;
+  y: number;
+  size: number;
+  delay: number;
+}
+
+interface GoldCoin {
+  id: number;
+  x: number;
+  delay: number;
+  rotation: number;
 }
 
 interface RecentWin {
@@ -113,28 +132,84 @@ function getPrizeBadgeVariant(color: CasePrize["color"]) {
 }
 
 function generateConfetti(count: number): Confetti[] {
-  const colors = ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8"];
+  const colors = ["#FFD700", "#FF6B6B", "#4ECDC4", "#45B7D1", "#96CEB4", "#FFEAA7", "#DDA0DD", "#98D8C8", "#FF69B4", "#00FF7F", "#FF4500", "#9400D3"];
+  const shapes: Confetti["shape"][] = ["square", "circle", "triangle", "star"];
   return Array.from({ length: count }, (_, i) => ({
     id: i,
     x: Math.random() * 100,
     color: colors[Math.floor(Math.random() * colors.length)],
-    delay: Math.random() * 0.5,
-    duration: 2 + Math.random() * 2,
+    delay: Math.random() * 0.8,
+    duration: 2.5 + Math.random() * 2.5,
+    shape: shapes[Math.floor(Math.random() * shapes.length)],
+    size: 8 + Math.random() * 12,
+    rotation: Math.random() * 360,
+    swingAmplitude: 20 + Math.random() * 40,
   }));
 }
 
-function ConfettiEffect({ active }: { active: boolean }) {
+function generateSparkles(count: number): Sparkle[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: 20 + Math.random() * 60,
+    y: 20 + Math.random() * 60,
+    size: 4 + Math.random() * 8,
+    delay: Math.random() * 1.5,
+  }));
+}
+
+function generateGoldCoins(count: number): GoldCoin[] {
+  return Array.from({ length: count }, (_, i) => ({
+    id: i,
+    x: Math.random() * 100,
+    delay: Math.random() * 1.2,
+    rotation: Math.random() * 720 - 360,
+  }));
+}
+
+function ConfettiShape({ shape, color, size }: { shape: Confetti["shape"]; color: string; size: number }) {
+  if (shape === "circle") {
+    return <div className="rounded-full" style={{ width: size, height: size, backgroundColor: color }} />;
+  }
+  if (shape === "triangle") {
+    return (
+      <div style={{
+        width: 0,
+        height: 0,
+        borderLeft: `${size/2}px solid transparent`,
+        borderRight: `${size/2}px solid transparent`,
+        borderBottom: `${size}px solid ${color}`,
+      }} />
+    );
+  }
+  if (shape === "star") {
+    return (
+      <svg width={size} height={size} viewBox="0 0 24 24" fill={color}>
+        <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/>
+      </svg>
+    );
+  }
+  return <div style={{ width: size, height: size, backgroundColor: color }} />;
+}
+
+function ConfettiEffect({ active, intensity = "normal" }: { active: boolean; intensity?: "normal" | "big" }) {
   const [confetti, setConfetti] = useState<Confetti[]>([]);
+  const [sparkles, setSparkles] = useState<Sparkle[]>([]);
 
   useEffect(() => {
     if (active) {
-      setConfetti(generateConfetti(50));
-      const timer = setTimeout(() => setConfetti([]), 4000);
+      const count = intensity === "big" ? 120 : 80;
+      setConfetti(generateConfetti(count));
+      setSparkles(generateSparkles(intensity === "big" ? 20 : 10));
+      const timer = setTimeout(() => {
+        setConfetti([]);
+        setSparkles([]);
+      }, 5000);
       return () => clearTimeout(timer);
     } else {
       setConfetti([]);
+      setSparkles([]);
     }
-  }, [active]);
+  }, [active, intensity]);
 
   if (!active || confetti.length === 0) return null;
 
@@ -143,25 +218,112 @@ function ConfettiEffect({ active }: { active: boolean }) {
       {confetti.map((piece) => (
         <motion.div
           key={piece.id}
-          className="absolute w-3 h-3 rounded-sm"
-          style={{
-            left: `${piece.x}%`,
-            backgroundColor: piece.color,
-          }}
-          initial={{ y: -20, opacity: 1, rotate: 0 }}
+          className="absolute"
+          style={{ left: `${piece.x}%` }}
+          initial={{ y: -30, opacity: 1, rotate: piece.rotation, x: 0 }}
           animate={{
-            y: "100vh",
-            opacity: [1, 1, 0],
-            rotate: 360 * (Math.random() > 0.5 ? 1 : -1),
+            y: "110vh",
+            opacity: [1, 1, 1, 0],
+            rotate: piece.rotation + 720 * (piece.id % 2 === 0 ? 1 : -1),
+            x: [0, piece.swingAmplitude, -piece.swingAmplitude, piece.swingAmplitude / 2, 0],
           }}
           transition={{
             duration: piece.duration,
             delay: piece.delay,
-            ease: "easeIn",
+            ease: [0.25, 0.46, 0.45, 0.94],
+            x: { duration: piece.duration, repeat: Infinity, repeatType: "reverse" },
           }}
-        />
+        >
+          <ConfettiShape shape={piece.shape} color={piece.color} size={piece.size} />
+        </motion.div>
+      ))}
+      {sparkles.map((sparkle) => (
+        <motion.div
+          key={`sparkle-${sparkle.id}`}
+          className="absolute"
+          style={{ left: `${sparkle.x}%`, top: `${sparkle.y}%` }}
+          initial={{ scale: 0, opacity: 0 }}
+          animate={{
+            scale: [0, 1.5, 0],
+            opacity: [0, 1, 0],
+            rotate: [0, 180],
+          }}
+          transition={{
+            duration: 0.8,
+            delay: sparkle.delay,
+            repeat: 2,
+            repeatDelay: 0.5,
+          }}
+        >
+          <Sparkles className="text-yellow-400" style={{ width: sparkle.size * 3, height: sparkle.size * 3 }} />
+        </motion.div>
       ))}
     </div>
+  );
+}
+
+function GoldCoinRain({ active }: { active: boolean }) {
+  const [coins, setCoins] = useState<GoldCoin[]>([]);
+
+  useEffect(() => {
+    if (active) {
+      setCoins(generateGoldCoins(25));
+      const timer = setTimeout(() => setCoins([]), 4000);
+      return () => clearTimeout(timer);
+    } else {
+      setCoins([]);
+    }
+  }, [active]);
+
+  if (!active || coins.length === 0) return null;
+
+  return (
+    <div className="fixed inset-0 pointer-events-none z-50 overflow-hidden">
+      {coins.map((coin) => (
+        <motion.div
+          key={coin.id}
+          className="absolute text-4xl"
+          style={{ left: `${coin.x}%` }}
+          initial={{ y: -50, opacity: 1, rotateY: 0 }}
+          animate={{
+            y: "110vh",
+            opacity: [1, 1, 0.8, 0],
+            rotateY: coin.rotation,
+          }}
+          transition={{
+            duration: 3 + Math.random(),
+            delay: coin.delay,
+            ease: "easeIn",
+          }}
+        >
+          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-300 via-yellow-500 to-yellow-600 border-2 border-yellow-700 shadow-lg flex items-center justify-center text-yellow-900 font-bold text-xs">
+            $
+          </div>
+        </motion.div>
+      ))}
+    </div>
+  );
+}
+
+function WinGlow({ active, color }: { active: boolean; color: string }) {
+  if (!active) return null;
+  
+  const glowColor = {
+    grey: "rgba(156, 163, 175, 0.3)",
+    lightblue: "rgba(59, 130, 246, 0.4)",
+    green: "rgba(16, 185, 129, 0.4)",
+    red: "rgba(239, 68, 68, 0.5)",
+    gold: "rgba(234, 179, 8, 0.6)",
+  }[color] || "rgba(234, 179, 8, 0.4)";
+
+  return (
+    <motion.div
+      className="fixed inset-0 pointer-events-none z-40"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: [0, 0.8, 0.3, 0.6, 0.2, 0] }}
+      transition={{ duration: 2, ease: "easeOut" }}
+      style={{ background: `radial-gradient(circle at 50% 50%, ${glowColor}, transparent 70%)` }}
+    />
   );
 }
 
@@ -247,6 +409,10 @@ export default function CaseOpening({
   const [showResultModal, setShowResultModal] = useState(false);
   const [soundOn, setSoundOn] = useState(isSoundEnabled());
   const [showConfetti, setShowConfetti] = useState(false);
+  const [confettiIntensity, setConfettiIntensity] = useState<"normal" | "big">("normal");
+  const [showGoldCoins, setShowGoldCoins] = useState(false);
+  const [showWinGlow, setShowWinGlow] = useState(false);
+  const [winGlowColor, setWinGlowColor] = useState<string>("gold");
   const [showScreenShake, setShowScreenShake] = useState(false);
   const [recentWins, setRecentWins] = useState<RecentWin[]>([]);
   const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
@@ -272,12 +438,27 @@ export default function CaseOpening({
 
   const triggerWinEffects = (prizeValue: number, prizeColor: CasePrize["color"], prizeLabel: string) => {
     if (prizeValue > 0) {
-      setShowConfetti(true);
-      setTimeout(() => setShowConfetti(false), 4000);
+      // Show win glow for all wins
+      setWinGlowColor(prizeColor);
+      setShowWinGlow(true);
+      setTimeout(() => setShowWinGlow(false), 2500);
+
+      // Confetti intensity based on prize value
+      if (prizeValue >= 25) {
+        setConfettiIntensity("big");
+        setShowGoldCoins(true);
+        setTimeout(() => setShowGoldCoins(false), 4000);
+      } else {
+        setConfettiIntensity("normal");
+      }
       
+      setShowConfetti(true);
+      setTimeout(() => setShowConfetti(false), 5000);
+      
+      // Screen shake for big wins
       if (prizeValue >= 25) {
         setShowScreenShake(true);
-        setTimeout(() => setShowScreenShake(false), 500);
+        setTimeout(() => setShowScreenShake(false), 600);
       }
 
       setRecentWins(prev => [{
@@ -476,7 +657,9 @@ export default function CaseOpening({
 
   return (
     <>
-      <ConfettiEffect active={showConfetti} />
+      <ConfettiEffect active={showConfetti} intensity={confettiIntensity} />
+      <GoldCoinRain active={showGoldCoins} />
+      <WinGlow active={showWinGlow} color={winGlowColor} />
       
       <ScreenShake active={showScreenShake}>
         <Card className="w-full max-w-2xl mx-auto overflow-visible">
