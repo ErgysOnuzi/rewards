@@ -501,12 +501,6 @@ export default function CaseOpening({
       
       setSpinState("spinning");
       
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setReelPosition(finalPosition);
-        });
-      });
-      
       let tickCount = 0;
       tickIntervalRef.current = setInterval(() => {
         playSpinTick();
@@ -519,26 +513,34 @@ export default function CaseOpening({
         }
       }, 80);
       
-      setTimeout(() => {
-        if (tickIntervalRef.current) {
-          clearInterval(tickIntervalRef.current);
-          tickIntervalRef.current = null;
-        }
-        
-        setHighlightedIndex(targetIndex);
-        
-        if (result.prizeValue > 0) {
-          playWinSound();
-          triggerWinEffects(result.prizeValue, result.prizeColor, result.prizeLabel);
-        } else {
-          playLoseSound();
-        }
-        
-        setLastResult(result);
-        setSpinState("result");
-        setShowResultModal(true);
-        onSpinComplete?.(result);
-      }, 3500);
+      // Use RAF to ensure animation starts, then start timer from that point
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setReelPosition(finalPosition);
+          
+          // Start timeout AFTER animation begins to ensure sync
+          setTimeout(() => {
+            if (tickIntervalRef.current) {
+              clearInterval(tickIntervalRef.current);
+              tickIntervalRef.current = null;
+            }
+            
+            setHighlightedIndex(targetIndex);
+            
+            if (result.prizeValue > 0) {
+              playWinSound();
+              triggerWinEffects(result.prizeValue, result.prizeColor, result.prizeLabel);
+            } else {
+              playLoseSound();
+            }
+            
+            setLastResult(result);
+            setSpinState("result");
+            setShowResultModal(true);
+            onSpinComplete?.(result);
+          }, 3500);
+        });
+      });
     } catch (error) {
       if (tickIntervalRef.current) {
         clearInterval(tickIntervalRef.current);
@@ -581,12 +583,6 @@ export default function CaseOpening({
       
       setSpinState("spinning");
       
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          setReelPosition(finalPosition);
-        });
-      });
-      
       let tickCount = 0;
       tickIntervalRef.current = setInterval(() => {
         playSpinTick();
@@ -599,37 +595,45 @@ export default function CaseOpening({
         }
       }, 80);
       
-      setTimeout(() => {
-        if (tickIntervalRef.current) {
-          clearInterval(tickIntervalRef.current);
-          tickIntervalRef.current = null;
-        }
-        
-        setHighlightedIndex(targetIndex);
-        
-        if (result.prize_value > 0) {
-          playWinSound();
-          triggerWinEffects(result.prize_value, result.prize_color as CasePrize["color"], result.prize_label);
-        } else {
-          playLoseSound();
-        }
+      // Use RAF to ensure animation starts, then start timer from that point
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setReelPosition(finalPosition);
+          
+          // Start timeout AFTER animation begins to ensure sync
+          setTimeout(() => {
+            if (tickIntervalRef.current) {
+              clearInterval(tickIntervalRef.current);
+              tickIntervalRef.current = null;
+            }
+            
+            setHighlightedIndex(targetIndex);
+            
+            if (result.prize_value > 0) {
+              playWinSound();
+              triggerWinEffects(result.prize_value, result.prize_color as CasePrize["color"], result.prize_label);
+            } else {
+              playLoseSound();
+            }
 
-        const spinResult: CaseSpinResult = {
-          result: result.prize_value > 0 ? "WIN" : "LOSE",
-          prizeLabel: result.prize_label,
-          prizeValue: result.prize_value,
-          prizeColor: result.prize_color as CasePrize["color"],
-          ticketsTotal: 0,
-          ticketsUsedAfter: 0,
-          ticketsRemainingAfter: ticketsRemaining,
-          walletBalance: result.wallet_balance,
-        };
+            const spinResult: CaseSpinResult = {
+              result: result.prize_value > 0 ? "WIN" : "LOSE",
+              prizeLabel: result.prize_label,
+              prizeValue: result.prize_value,
+              prizeColor: result.prize_color as CasePrize["color"],
+              ticketsTotal: 0,
+              ticketsUsedAfter: 0,
+              ticketsRemainingAfter: ticketsRemaining,
+              walletBalance: result.wallet_balance,
+            };
 
-        setLastResult(spinResult);
-        setSpinState("result");
-        setShowResultModal(true);
-        onBonusUsed?.();
-      }, 3500);
+            setLastResult(spinResult);
+            setSpinState("result");
+            setShowResultModal(true);
+            onBonusUsed?.();
+          }, 3500);
+        });
+      });
     } catch (error) {
       if (tickIntervalRef.current) {
         clearInterval(tickIntervalRef.current);
