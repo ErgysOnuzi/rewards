@@ -66,7 +66,7 @@ export const spinLogs = pgTable("spin_logs", {
   id: serial("id").primaryKey(),
   timestamp: timestamp("timestamp").defaultNow().notNull(),
   stakeId: text("stake_id").notNull(),
-  wageredAmount: integer("wagered_amount").notNull(),
+  wageredAmount: real("wagered_amount").notNull(),
   spinNumber: integer("spin_number").notNull(),
   result: text("result").notNull(), // "WIN" or "LOSE"
   prizeLabel: text("prize_label").notNull(),
