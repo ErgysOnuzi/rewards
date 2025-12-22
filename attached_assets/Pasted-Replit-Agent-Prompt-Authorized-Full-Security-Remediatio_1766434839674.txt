@@ -1,0 +1,171 @@
+Replit Agent Prompt — Authorized Full Security Remediation
+
+You are an authorized security remediation agent operating with full owner consent on the codebase backing stakeunlocked.com. This is a defensive task. Do not perform offensive exploitation. Do not test against production endpoints directly; operate on the repository, configuration, and controlled test environment only.
+
+Objective
+Identify, fix, verify, and document every security issue described below. No omissions. No partial fixes. No assumptions. Deliver code changes, configs, tests, and a final verification report.
+
+⸻
+
+Scope
+
+Frontend, backend, APIs, authentication, authorization, sessions, cookies, headers, infrastructure config, dependencies, admin controls, logging, error handling, build pipeline.
+
+⸻
+
+Mandatory Actions (Execute in Order)
+
+1) Inventory & Baseline
+	•	Identify stack (frameworks, versions).
+	•	Enumerate all routes, APIs, forms, AJAX calls.
+	•	Enumerate auth flows, roles, permissions.
+	•	List all cookies, headers, session stores.
+	•	Produce a dependency inventory (frontend + backend).
+
+2) Authentication & Sessions (Critical)
+	•	Enforce strong password policy.
+	•	Implement MFA for admin.
+	•	Add login rate-limiting and exponential backoff.
+	•	Regenerate session IDs on login, privilege change, logout.
+	•	Server-side session invalidation on logout.
+	•	Enforce inactivity timeout (≤30 min) and absolute lifetime.
+	•	Ensure no tokens in URLs or logs.
+
+Deliverables
+	•	Auth middleware changes.
+	•	Session store config.
+	•	Tests covering login, logout, timeout, fixation.
+
+3) Access Control (Critical)
+	•	Implement deny-by-default authorization middleware.
+	•	Enforce RBAC on every endpoint.
+	•	Eliminate IDOR: derive object ownership from session; verify ownership on access.
+	•	Remove any reliance on hidden URLs or client-side checks.
+
+Deliverables
+	•	Central authorization layer.
+	•	Per-route permission mapping.
+	•	Tests for unauthorized access attempts.
+
+4) CSRF Protection (High)
+	•	Add synchronizer CSRF tokens to all state-changing requests.
+	•	Enforce POST/PUT/PATCH/DELETE for mutations.
+	•	Validate tokens server-side.
+	•	Set cookies: Secure; HttpOnly; SameSite=Strict.
+
+Deliverables
+	•	CSRF middleware.
+	•	Updated forms/AJAX.
+	•	CSRF tests.
+
+5) XSS Mitigation (High)
+	•	Output-encode everywhere; no input trust.
+	•	Remove inline scripts.
+	•	Enforce strict CSP:
+
+default-src 'self';
+script-src 'self';
+object-src 'none';
+base-uri 'none';
+frame-ancestors 'none';
+
+Deliverables
+	•	Template/component fixes.
+	•	CSP header config.
+	•	XSS regression tests.
+
+6) Security Headers (High)
+
+Configure globally:
+	•	Strict-Transport-Security: max-age=63072000; includeSubDomains; preload
+	•	Content-Security-Policy (as above)
+	•	X-Frame-Options: DENY (or CSP equivalent)
+	•	X-Content-Type-Options: nosniff
+	•	Referrer-Policy: strict-origin-when-cross-origin
+
+Deliverables
+	•	Server/middleware config.
+	•	Header verification tests.
+
+7) Cookies (High)
+	•	Mark all auth cookies Secure; HttpOnly; SameSite=Strict.
+	•	No duplicate or legacy cookies.
+	•	Validate domain/path scoping.
+
+Deliverables
+	•	Cookie config changes.
+	•	Tests verifying attributes.
+
+8) API Hardening (Critical)
+	•	Authenticate every endpoint.
+	•	Authorize every action.
+	•	Add request validation schemas.
+	•	Prevent mass assignment via DTOs/allowlists.
+	•	Enforce content-type checks.
+
+Deliverables
+	•	API middleware.
+	•	DTOs/schemas.
+	•	API tests (authz, validation, mass assignment).
+
+9) File Handling & OS Interaction (High)
+	•	If uploads exist: allowlist extensions, verify MIME/signatures, store outside webroot, randomize filenames.
+	•	Eliminate exec/system usage; replace with safe APIs.
+
+Deliverables
+	•	Upload handlers (if applicable).
+	•	Security tests.
+
+10) Dependency & Build Security (High)
+	•	Run audits (npm audit / composer audit or equivalent).
+	•	Update vulnerable packages.
+	•	Remove unused dependencies.
+	•	Lock versions.
+	•	Add CI step to fail on critical CVEs.
+
+Deliverables
+	•	Updated lockfiles.
+	•	CI config.
+
+11) Infrastructure & TLS (Medium)
+	•	Enforce TLS 1.2+ only.
+	•	Strong ciphers only.
+	•	Enable HSTS.
+	•	Remove directory listings.
+	•	Ensure no debug endpoints or backup files are exposed.
+
+Deliverables
+	•	Server config (nginx/express/etc.).
+	•	TLS verification notes.
+
+12) Logging & Errors (High)
+	•	Generic user-facing errors only.
+	•	No stack traces in production.
+	•	Sanitize logs.
+	•	Add security event logging (auth failures, access denials).
+
+Deliverables
+	•	Error handlers.
+	•	Log config.
+
+⸻
+
+Verification
+	•	Add automated tests for each fixed class of issue.
+	•	Provide before/after evidence for headers, cookies, authz, CSRF, CSP.
+	•	Produce a final checklist mapping each finding to:
+	•	file(s) changed
+	•	commit hash
+	•	test proving remediation
+
+⸻
+
+Output Requirements
+	•	Code changes committed.
+	•	Config files included.
+	•	Tests passing.
+	•	Final markdown report:
+	•	Issue → Fix → Evidence.
+	•	Residual risk (if any) with justification.
+
+Execute fully. Skip nothing.
