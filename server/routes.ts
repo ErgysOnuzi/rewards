@@ -14,7 +14,7 @@ import type {
 } from "@shared/schema";
 import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
-import { isRateLimited, isStakeIdRateLimited } from "./lib/rateLimit";
+import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { ZodError, z } from "zod";
 import { db } from "./db";
@@ -586,6 +586,20 @@ export async function registerRoutes(
   app.post("/api/admin/login", async (req: Request, res: Response) => {
     const clientIp = getClientIpForSecurity(req);
     const ipHash = hashForLogging(clientIp);
+    
+    // Brute force protection - 5 attempts per 15 minutes
+    if (isAdminLoginRateLimited(ipHash)) {
+      const lockoutMs = getAdminLoginLockoutMs(ipHash);
+      const lockoutMinutes = Math.ceil(lockoutMs / 60000);
+      logSecurityEvent({
+        type: "rate_limit_exceeded",
+        ipHash,
+        details: `Admin login rate limit exceeded. Locked for ${lockoutMinutes} minutes`,
+      });
+      return res.status(429).json({ 
+        message: `Too many login attempts. Try again in ${lockoutMinutes} minutes.` 
+      });
+    }
     
     try {
       const { password } = adminLoginSchema.parse(req.body);

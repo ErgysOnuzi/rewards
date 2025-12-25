@@ -5,6 +5,10 @@ import { createServer } from "http";
 import cookieParser from "cookie-parser";
 import { startBackgroundRefresh } from "./lib/sheets";
 import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/security";
+import { enforceSecurityRequirements } from "./lib/config";
+
+// Validate security requirements at startup - fail hard if missing
+enforceSecurityRequirements();
 
 const app = express();
 const httpServer = createServer(app);
@@ -24,15 +28,20 @@ app.use(cookieParser());
 // CSRF protection for state-changing requests
 app.use(csrfProtection);
 
+// Request body size limits to prevent DoS attacks
+const JSON_LIMIT = "100kb"; // Reasonable limit for API requests
+const URL_ENCODED_LIMIT = "100kb";
+
 app.use(
   express.json({
+    limit: JSON_LIMIT,
     verify: (req, _res, buf) => {
       req.rawBody = buf;
     },
   }),
 );
 
-app.use(express.urlencoded({ extended: false }));
+app.use(express.urlencoded({ extended: false, limit: URL_ENCODED_LIMIT }));
 
 export function log(message: string, source = "express") {
   const formattedTime = new Date().toLocaleTimeString("en-US", {

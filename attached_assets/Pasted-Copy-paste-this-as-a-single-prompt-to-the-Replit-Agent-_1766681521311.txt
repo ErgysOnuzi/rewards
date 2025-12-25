@@ -1,0 +1,120 @@
+Copy-paste this as a single prompt to the Replit Agent. No additions.
+
+⸻
+
+You are acting as a senior application security engineer and production SRE.
+
+Goal: perform a full security audit and remediation of this entire Replit project. Assume the app is internet-exposed and hostile traffic is guaranteed. Do not skip any area. Do not assume Replit provides security defaults. Treat this as production software.
+
+Phase 1 — Inventory & Threat Model
+	•	Enumerate all entry points: frontend routes, backend routes, APIs, webhooks, admin paths, uploads, background jobs.
+	•	Identify trust boundaries between client, server, database, third-party APIs.
+	•	Identify assets: user data, credentials, payments, admin privileges.
+
+Phase 2 — Secrets & Environment
+	•	Remove all hardcoded secrets from code and frontend.
+	•	Move secrets to Replit Secrets / environment variables.
+	•	Ensure secrets are never logged, returned, or exposed in errors.
+	•	Separate dev vs prod secrets.
+	•	Enforce least-privilege credentials (DB, APIs).
+	•	Add secrets validation on startup (fail hard if missing).
+
+Phase 3 — Authentication & Authorization
+	•	Enforce server-side auth checks on every protected route.
+	•	Implement proper role-based access control (user/admin).
+	•	Remove any frontend-only authorization logic.
+	•	Secure admin routes with real auth, not obscurity.
+	•	Add brute-force protection on login.
+	•	Add optional MFA hooks if applicable.
+
+Phase 4 — Session & Token Security
+	•	Fix JWT usage:
+	•	Expiration, issuer, audience.
+	•	Short-lived access tokens.
+	•	Refresh token rotation.
+	•	Move tokens to HttpOnly, Secure, SameSite cookies.
+	•	Implement logout + token revocation.
+	•	Eliminate localStorage/sessionStorage token use.
+
+Phase 5 — Input Validation & Injection Defense
+	•	Add strict schema validation for all inputs (body, query, params).
+	•	Sanitize and validate user-supplied data.
+	•	Replace string-built queries with parameterized queries / ORM.
+	•	Prevent SQL/NoSQL injection.
+	•	Prevent command injection (no unsafe shell calls).
+	•	Harden JSON parsing and deserialization.
+
+Phase 6 — XSS & Client Security
+	•	Sanitize all user-generated content.
+	•	Lock down any HTML/Markdown rendering.
+	•	Prevent stored and reflected XSS.
+	•	Escape output by default.
+	•	Audit admin panels specifically.
+
+Phase 7 — CORS, CSRF, Headers
+	•	Replace wildcard CORS with explicit allowed origins.
+	•	Disable credentials with *.
+	•	Add CSRF protection to all state-changing requests.
+	•	Add security headers:
+	•	Content-Security-Policy
+	•	X-Frame-Options
+	•	X-Content-Type-Options
+	•	Referrer-Policy
+	•	HSTS (if HTTPS)
+
+Phase 8 — Rate Limiting & Abuse Protection
+	•	Add rate limiting per IP and per user.
+	•	Add request size limits.
+	•	Add basic bot and abuse mitigation.
+	•	Protect password reset, login, admin, and API endpoints.
+
+Phase 9 — File Upload & Storage
+	•	Restrict upload types and MIME validation.
+	•	Enforce file size limits.
+	•	Sanitize filenames.
+	•	Store uploads outside public paths if sensitive.
+	•	Require auth for file access where needed.
+
+Phase 10 — Dependencies & Supply Chain
+	•	Audit all dependencies for known vulnerabilities.
+	•	Upgrade or replace vulnerable packages.
+	•	Lock dependency versions.
+	•	Remove unused dependencies.
+	•	Avoid untrusted or abandoned packages.
+
+Phase 11 — Logging & Error Handling
+	•	Remove stack traces from user responses.
+	•	Standardize safe error messages.
+	•	Ensure logs never contain secrets or PII.
+	•	Add structured logging.
+	•	Add basic audit logs for auth/admin actions.
+
+Phase 12 — Database Security
+	•	Enforce least-privilege DB users.
+	•	Ensure DB is not publicly exposed.
+	•	Add connection security.
+	•	Validate queries.
+	•	Add backups and basic integrity checks.
+
+Phase 13 — Monitoring & Hardening
+	•	Add basic health checks.
+	•	Add security-relevant logging.
+	•	Add alerts for auth abuse and errors.
+	•	Ensure app fails closed, not open.
+
+Phase 14 — Verification
+	•	Re-test all fixes.
+	•	Confirm no auth bypass, injection, XSS, CSRF, or secret leakage remains.
+	•	Document all changes clearly in comments.
+
+Output requirements:
+	•	Modify code directly to implement fixes.
+	•	Do not leave TODOs.
+	•	Do not remove features.
+	•	Do not weaken functionality.
+	•	Explain changes only in concise inline comments.
+	•	Assume zero trust everywhere.
+
+If any area is not applicable, explicitly justify why in comments.
+
+Begin immediately.
