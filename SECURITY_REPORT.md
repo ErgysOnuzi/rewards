@@ -1,8 +1,8 @@
 # Security Remediation Report
 
-**Date:** December 22, 2025  
+**Date:** December 25, 2025 (Updated)  
 **Application:** LukeRewards Spins  
-**Status:** Completed
+**Status:** Completed with Enhanced Protections
 
 ---
 
@@ -80,11 +80,12 @@ Enhanced session security:
 
 ---
 
-### 5. Authentication Hardening (server/routes.ts)
+### 5. Authentication Hardening (server/routes.ts, server/lib/rateLimit.ts)
 
 - **Timing-safe Password Comparison:** Uses `crypto.timingSafeEqual()` to prevent timing attacks
 - **Rate Limiting:** IP-based and Stake ID-based rate limiting already in place
 - **Blacklist Checking:** Users can be blacklisted to prevent access
+- **Admin Login Brute Force Protection:** 5 attempts per 15 minutes per IP with automatic lockout
 
 ---
 
@@ -138,6 +139,46 @@ New security event logging system tracks:
 
 ---
 
+### 10. Startup Security Validation (server/lib/config.ts, server/index.ts)
+
+**Added December 25, 2025**
+
+Application validates critical secrets at startup:
+
+| Secret | Requirement | Behavior if Missing |
+|--------|-------------|---------------------|
+| DATABASE_URL | Required | Fail hard in production |
+| SESSION_SECRET | Required, min 32 chars | Fail hard in production |
+| ADMIN_PASSWORD | Required, recommend 12+ chars | Fail hard in production |
+| GOOGLE_SERVICE_ACCOUNT_EMAIL | Recommended | Warning only |
+| GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY | Recommended | Warning only |
+
+---
+
+### 11. Request Body Limits (server/index.ts)
+
+**Added December 25, 2025**
+
+DoS protection via request size limits:
+
+| Type | Limit |
+|------|-------|
+| JSON Body | 100kb |
+| URL-encoded Body | 100kb |
+
+---
+
+### 12. SQL Injection Protection
+
+**Verified December 25, 2025**
+
+All database queries use Drizzle ORM with parameterized queries. Audit confirmed:
+- No raw SQL string concatenation
+- All `sql` template tag usage contains only static query fragments
+- User input never interpolated into SQL strings
+
+---
+
 ## Dependency Audit
 
 **npm audit results:** 5 moderate severity vulnerabilities
@@ -154,9 +195,11 @@ All vulnerabilities are in development dependencies:
 
 | File | Changes |
 |------|---------|
-| server/lib/security.ts | **NEW** - Security middleware, CSRF, headers, logging |
-| server/index.ts | Added security middleware imports and usage |
-| server/routes.ts | Security logging, hardened auth, session management |
+| server/lib/security.ts | Security middleware, CSRF, headers, logging |
+| server/lib/config.ts | Startup secrets validation |
+| server/lib/rateLimit.ts | Admin login brute force protection |
+| server/index.ts | Security middleware, body limits, startup validation |
+| server/routes.ts | Security logging, hardened auth, session management, brute force check |
 | shared/schema.ts | Added `lastActivityAt` to admin_sessions |
 
 ---
@@ -174,6 +217,10 @@ All vulnerabilities are in development dependencies:
 - [x] Generic error messages in production
 - [x] Security event logging
 - [x] Request ID tracking
+- [x] Startup secrets validation (fail hard in production)
+- [x] Request body size limits (100kb)
+- [x] Admin login brute force protection (5 attempts/15 min)
+- [x] SQL injection protection (Drizzle ORM parameterization)
 
 ---
 
@@ -198,4 +245,5 @@ All vulnerabilities are in development dependencies:
 ---
 
 **Report completed by:** Replit Agent  
-**Review status:** Pending architect review
+**Last Updated:** December 25, 2025  
+**Review status:** Completed

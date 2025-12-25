@@ -14,7 +14,7 @@ import type {
 } from "@shared/schema";
 import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
-import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs } from "./lib/rateLimit";
+import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { ZodError, z } from "zod";
 import { db } from "./db";
@@ -652,6 +652,9 @@ export async function registerRoutes(
 
       // Generate CSRF token for admin session
       const csrfToken = generateCSRFToken(sessionToken);
+      
+      // Reset brute force counter on successful login
+      resetAdminLoginAttempts(ipHash);
       
       logSecurityEvent({
         type: "auth_success",

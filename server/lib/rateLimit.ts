@@ -85,6 +85,11 @@ export function getAdminLoginLockoutMs(ipHash: string): number {
   return remaining > 0 ? remaining : 0;
 }
 
+// Reset admin login attempts on successful login
+export function resetAdminLoginAttempts(ipHash: string): void {
+  adminLoginAttemptStore.delete(ipHash);
+}
+
 export function cleanupExpiredEntries(): void {
   const now = Date.now();
   for (const store of [ipRateLimitStore, stakeIdRateLimitStore, adminLoginAttemptStore]) {
