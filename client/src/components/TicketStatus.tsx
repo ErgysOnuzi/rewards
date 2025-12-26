@@ -161,7 +161,7 @@ interface StatusCardProps {
 }
 
 function StatusCard({ icon, label, value, subtext, highlight = false, showTicketIcon = false, testId }: StatusCardProps) {
-  const bgClass = highlight ? "bg-primary/10 ring-1 ring-primary/20" : "bg-muted/50";
+  const bgClass = highlight ? "bg-primary/10 ring-2 ring-primary/50" : "bg-muted/50";
   const textClass = highlight ? "text-primary" : "text-muted-foreground";
 
   return (
