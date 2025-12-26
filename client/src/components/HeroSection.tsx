@@ -30,12 +30,6 @@ export default function HeroSection() {
           Each spin costs 1 ticket.
         </p>
         
-        <p 
-          className="text-sm text-muted-foreground/70"
-          data-testid="text-hero-disclaimer"
-        >
-          Odds favor the house.
-        </p>
       </div>
     </section>
   );

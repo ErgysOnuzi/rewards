@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Search, Loader2 } from "lucide-react";
 
 interface StakeIdFormProps {
@@ -24,7 +24,10 @@ export default function StakeIdForm({ onSubmit, isLoading = false, error }: Stak
 
   return (
     <Card className="max-w-md mx-auto">
-      <CardContent className="pt-6">
+      <CardHeader className="pb-2">
+        <CardTitle className="text-lg text-center">Enter Your Stake ID</CardTitle>
+      </CardHeader>
+      <CardContent>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="space-y-2">
             <div className="relative">
