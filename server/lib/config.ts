@@ -5,8 +5,8 @@ export const config = {
   spinLogSheetName: process.env.SPIN_LOG_SHEET_NAME || "SPIN_LOG",
   
   // Weighted wager sheets for ticket calculation (domain-specific)
-  weightedSheetsUs: process.env.WEIGHTED_SHEETS_US || "1p9Ab7UOEyjweka4JVla86dfv19ThCmblUhaR4rbj5INA",
-  weightedSheetsCom: process.env.WEIGHTED_SHEETS_COM || "1mCyxOQPg9vd9pD5QZP5XAd5G6aKDBqvgchB6yu5fwlM",
+  weightedSheetsUs: process.env.WEIGHTED_SHEETS_US || "1p9Ab7U0Eyjwek4JVIa86dfvl9ThCmbLUhaR4rbJ5INA",
+  weightedSheetsCom: process.env.WEIGHTED_SHEETS_COM || "1mCyx0QPg9vd9pD5QzPSXAd58GaKDBqvgchB6yu5fwIM",
   weightedSheetName: process.env.WEIGHTED_SHEET_NAME || "Sheet1",
   
   winProbability: parseFloat(process.env.WIN_PROBABILITY || "0.01"),
