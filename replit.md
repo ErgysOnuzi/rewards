@@ -121,19 +121,25 @@ Navigate to `/admin` and enter the ADMIN_PASSWORD to access the control panel.
 ### Google Sheets Integration (Required)
 - **Purpose**: Primary data store for wager data and spin logs
 - **Library**: `googleapis` package with Sheets API v4
-- **Authentication**: Service account credentials via environment variables
+- **Authentication**: Replit OAuth integration for Google Sheets
+
+### Dual Sheet System
+- **NGR Sheet**: Primary sheet for user lookup (unweighted data)
+- **Weighted Sheets**: Domain-specific sheets for ticket calculation (.us and .com)
+- Tickets are calculated from weighted wagers when available, falling back to NGR data
 
 ### Required Environment Variables
 - `DATABASE_URL` - PostgreSQL connection
 - `SESSION_SECRET` - Session encryption key
-- `GOOGLE_SHEETS_ID` - The spreadsheet ID to read/write
-- `GOOGLE_SERVICE_ACCOUNT_EMAIL` - Service account email for auth
-- `GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY` - Private key (newlines as `\n`)
+- `GOOGLE_SHEETS_ID` - The spreadsheet ID for NGR data
 - `ADMIN_PASSWORD` - Password for admin panel access
 
 ### Optional Environment Variables
-- `WAGER_SHEET_NAME` - Tab name for wager data (default: "WAGER_DATA")
+- `WAGER_SHEET_NAME` - Tab name for wager data (default: "Affiliate NGR Summary")
 - `SPIN_LOG_SHEET_NAME` - Tab name for spin logs (default: "SPIN_LOG")
+- `WEIGHTED_SHEETS_US` - Spreadsheet ID for .us domain weighted wagers
+- `WEIGHTED_SHEETS_COM` - Spreadsheet ID for .com domain weighted wagers
+- `WEIGHTED_SHEET_NAME` - Tab name for weighted data (default: "Sheet1")
 
 ### Configurable Options
 - `WIN_PROBABILITY` - Decimal win chance (default: 0.01 = 1%)
