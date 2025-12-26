@@ -1,7 +1,14 @@
 export const config = {
+  // Primary NGR sheet (unweighted data)
   googleSheetsId: process.env.GOOGLE_SHEETS_ID || "",
   wagerSheetName: process.env.WAGER_SHEET_NAME || "Affiliate NGR Summary",
   spinLogSheetName: process.env.SPIN_LOG_SHEET_NAME || "SPIN_LOG",
+  
+  // Weighted wager sheets for ticket calculation (domain-specific)
+  weightedSheetsUs: process.env.WEIGHTED_SHEETS_US || "1p9Ab7UOEyjweka4JVla86dfv19ThCmblUhaR4rbj5INA",
+  weightedSheetsCom: process.env.WEIGHTED_SHEETS_COM || "1mCyxOQPg9vd9pD5QZP5XAd5G6aKDBqvgchB6yu5fwlM",
+  weightedSheetName: process.env.WEIGHTED_SHEET_NAME || "Sheet1",
+  
   winProbability: parseFloat(process.env.WIN_PROBABILITY || "0.01"),
   prizeLabel: process.env.PRIZE_LABEL || "$5 Stake Tip",
   prizeValue: parseInt(process.env.PRIZE_VALUE || "5", 10),

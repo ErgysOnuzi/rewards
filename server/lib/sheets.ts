@@ -58,19 +58,29 @@ let cacheTimestamp: number = 0;
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
 let backgroundRefreshInterval: NodeJS.Timeout | null = null;
 
+// Weighted wager caches (for .us and .com domains)
+let weightedDataCacheUs: Map<string, number> | null = null;
+let weightedDataCacheCom: Map<string, number> | null = null;
+let weightedCacheTimestamp: number = 0;
+
 // Start automatic background refresh every 5 minutes
 export function startBackgroundRefresh() {
   if (backgroundRefreshInterval) {
     clearInterval(backgroundRefreshInterval);
   }
   
-  // Initial load
+  // Initial load - NGR sheet
   loadWagerDataCache().then(cache => {
     wagerDataCache = cache;
     cacheTimestamp = Date.now();
     console.log(`[Sheets] Initial load: ${cache.size} users from wager sheet`);
   }).catch(err => {
     console.error("[Sheets] Failed initial load:", err);
+  });
+  
+  // Initial load - Weighted sheets
+  loadAllWeightedData().catch(err => {
+    console.error("[Sheets] Failed to load weighted data:", err);
   });
   
   // Schedule refresh every 5 minutes
@@ -80,6 +90,9 @@ export function startBackgroundRefresh() {
       wagerDataCache = newCache;
       cacheTimestamp = Date.now();
       console.log(`[Sheets] Background refresh: ${newCache.size} users loaded at ${new Date().toISOString()}`);
+      
+      // Also refresh weighted data
+      await loadAllWeightedData();
     } catch (err) {
       console.error("[Sheets] Background refresh failed:", err);
     }
@@ -94,6 +107,117 @@ export function stopBackgroundRefresh() {
     backgroundRefreshInterval = null;
     console.log("[Sheets] Background refresh stopped");
   }
+}
+
+// Load weighted wager data from a specific sheet
+async function loadWeightedDataFromSheet(sheetId: string): Promise<Map<string, number>> {
+  const sheets = await getSheetsClient();
+  const cache = new Map<string, number>();
+  
+  try {
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: config.weightedSheetName,
+    });
+
+    const rows = response.data.values;
+    if (!rows || rows.length <= 1) return cache;
+
+    // Find header row - check first few rows for "User_Name" or similar column
+    let headerRowIdx = 0;
+    let headers: string[] = [];
+    
+    for (let i = 0; i < Math.min(5, rows.length); i++) {
+      const potentialHeaders = rows[i].map((h: any) => String(h || "").trim().toLowerCase());
+      if (potentialHeaders.some((h: string) => h === "user_name" || h === "username" || h === "stake_id" || h === "stakeid")) {
+        headerRowIdx = i;
+        headers = rows[i].map((h: any) => String(h || "").trim());
+        break;
+      }
+    }
+    
+    if (headers.length === 0) {
+      // Fallback: assume first row is headers
+      headerRowIdx = 0;
+      headers = rows[0].map((h: any) => String(h || "").trim());
+    }
+
+    // Find column indices
+    const userNameIdx = headers.findIndex(h => 
+      h.toLowerCase() === "user_name" || 
+      h.toLowerCase() === "username" || 
+      h.toLowerCase() === "stake_id" ||
+      h.toLowerCase() === "stakeid"
+    );
+    
+    const weightedWagerIdx = headers.findIndex(h => 
+      h.toLowerCase() === "weighted wager" || 
+      h.toLowerCase() === "weighted_wager" ||
+      h.toLowerCase() === "weightedwager"
+    );
+    
+    if (userNameIdx < 0 || weightedWagerIdx < 0) {
+      console.warn(`[Weighted] Could not find required columns in sheet ${sheetId}. Headers: ${headers.join(', ')}`);
+      return cache;
+    }
+
+    // Parse data rows
+    for (let i = headerRowIdx + 1; i < rows.length; i++) {
+      const row = rows[i];
+      const stakeId = (row[userNameIdx] || "").toString().trim().toLowerCase();
+      if (!stakeId) continue;
+      
+      const weightedWager = parseFloat(String(row[weightedWagerIdx] || "0").replace(/[$,]/g, "")) || 0;
+      
+      // Sum if duplicate
+      const existing = cache.get(stakeId) || 0;
+      cache.set(stakeId, existing + Math.max(0, weightedWager));
+    }
+    
+    console.log(`[Weighted] Loaded ${cache.size} users from sheet ${sheetId.substring(0, 10)}...`);
+    return cache;
+  } catch (err) {
+    console.error(`[Weighted] Failed to load sheet ${sheetId}:`, err);
+    return cache;
+  }
+}
+
+// Load all weighted data (both .us and .com sheets)
+async function loadAllWeightedData(): Promise<void> {
+  const [usCache, comCache] = await Promise.all([
+    loadWeightedDataFromSheet(config.weightedSheetsUs),
+    loadWeightedDataFromSheet(config.weightedSheetsCom),
+  ]);
+  
+  weightedDataCacheUs = usCache;
+  weightedDataCacheCom = comCache;
+  weightedCacheTimestamp = Date.now();
+  
+  console.log(`[Weighted] Total loaded: US=${usCache.size}, COM=${comCache.size}`);
+}
+
+// Get weighted wager for a user based on their domain
+export function getWeightedWager(stakeId: string, domain: "us" | "com" = "com"): number {
+  const normalizedId = stakeId.toLowerCase().trim();
+  const cache = domain === "us" ? weightedDataCacheUs : weightedDataCacheCom;
+  return cache?.get(normalizedId) || 0;
+}
+
+// Get weighted wager status for admin
+export function getWeightedCacheStatus(): {
+  usLoaded: boolean;
+  usRowCount: number;
+  comLoaded: boolean;
+  comRowCount: number;
+  lastRefresh: Date | null;
+} {
+  return {
+    usLoaded: weightedDataCacheUs !== null,
+    usRowCount: weightedDataCacheUs?.size || 0,
+    comLoaded: weightedDataCacheCom !== null,
+    comRowCount: weightedDataCacheCom?.size || 0,
+    lastRefresh: weightedCacheTimestamp ? new Date(weightedCacheTimestamp) : null,
+  };
 }
 
 // Find column index by header name (case-insensitive)

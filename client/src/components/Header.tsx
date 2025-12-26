@@ -12,11 +12,13 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Ticket className="w-5 h-5 text-primary" />
-          <span className="font-semibold text-lg">LukeRewards</span>
-        </div>
+      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-center gap-4">
+        {!hasData && (
+          <div className="flex items-center gap-2">
+            <Ticket className="w-5 h-5 text-primary" />
+            <span className="font-semibold text-lg">LukeRewards</span>
+          </div>
+        )}
 
         {hasData && (
           <div className="flex items-center gap-3">
