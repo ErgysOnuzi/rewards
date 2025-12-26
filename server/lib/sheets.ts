@@ -114,6 +114,8 @@ async function loadWeightedDataFromSheet(sheetId: string): Promise<Map<string, n
   const sheets = await getSheetsClient();
   const cache = new Map<string, number>();
   
+  console.log(`[Weighted] Loading sheet: ${sheetId.substring(0, 10)}... tab: ${config.weightedSheetName}`);
+  
   try {
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
@@ -121,6 +123,7 @@ async function loadWeightedDataFromSheet(sheetId: string): Promise<Map<string, n
     });
 
     const rows = response.data.values;
+    console.log(`[Weighted] Got ${rows?.length || 0} rows from ${sheetId.substring(0, 10)}...`);
     if (!rows || rows.length <= 1) return cache;
 
     // Find header row - check first few rows for "User_Name" or similar column
@@ -141,6 +144,8 @@ async function loadWeightedDataFromSheet(sheetId: string): Promise<Map<string, n
       headerRowIdx = 0;
       headers = rows[0].map((h: any) => String(h || "").trim());
     }
+    
+    console.log(`[Weighted] Sheet ${sheetId.substring(0, 10)}... headers found: ${headers.join(', ')}`);
 
     // Find column indices
     const userNameIdx = headers.findIndex(h => 
@@ -150,13 +155,14 @@ async function loadWeightedDataFromSheet(sheetId: string): Promise<Map<string, n
       h.toLowerCase() === "stakeid"
     );
     
-    const weightedWagerIdx = headers.findIndex(h => 
+    const wageredIdx = headers.findIndex(h => 
+      h.toLowerCase() === "wagered" || 
       h.toLowerCase() === "weighted wager" || 
       h.toLowerCase() === "weighted_wager" ||
       h.toLowerCase() === "weightedwager"
     );
     
-    if (userNameIdx < 0 || weightedWagerIdx < 0) {
+    if (userNameIdx < 0 || wageredIdx < 0) {
       console.warn(`[Weighted] Could not find required columns in sheet ${sheetId}. Headers: ${headers.join(', ')}`);
       return cache;
     }
@@ -167,7 +173,7 @@ async function loadWeightedDataFromSheet(sheetId: string): Promise<Map<string, n
       const stakeId = (row[userNameIdx] || "").toString().trim().toLowerCase();
       if (!stakeId) continue;
       
-      const weightedWager = parseFloat(String(row[weightedWagerIdx] || "0").replace(/[$,]/g, "")) || 0;
+      const weightedWager = parseFloat(String(row[wageredIdx] || "0").replace(/[$,]/g, "")) || 0;
       
       // Sum if duplicate
       const existing = cache.get(stakeId) || 0;
