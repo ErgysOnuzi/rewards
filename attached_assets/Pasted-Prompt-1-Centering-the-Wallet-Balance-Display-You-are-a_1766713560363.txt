@@ -1,0 +1,142 @@
+Prompt 1: Centering the Wallet/Balance Display
+You are a Replit AI agent tasked with updating the lukerewards.com website codebase. The client wants the wallet or balance display to be centered for better visual appeal. Currently, there’s a basic balance widget showing “$0” with a coin symbol, but it’s not centered. Make this change across all relevant pages, including the main dashboard and any integrated sections.
+Detailed instructions:
+	•	Locate the HTML/CSS/JS files handling the balance display (likely in components like Wallet.js or Dashboard.css).
+	•	Identify the container element for the balance (e.g., a div with class “balance-widget” or similar).
+	•	Apply CSS centering: Use flexbox or grid to center it horizontally and vertically if needed. For example, add display: flex; justify-content: center; align-items: center; to the parent container.
+	•	Ensure responsiveness: On mobile (screen widths < 768px), keep it centered but adjust padding/margins to avoid overflow.
+	•	Test on desktop and mobile emulators in Replit.
+	•	If it’s React/Vue/whatever framework is used, update the component render method accordingly.
+	•	Commit the changes with message: “Centered wallet/balance as per client feedback.”
+	•	After update, preview the site and confirm the balance (e.g., “$0”) is perfectly centered without breaking other elements.
+Prompt 2: Adding a New Top Tab for Balance Similar to Stake
+You are a Replit AI agent building on the lukerewards.com project. The client suggests integrating the balance into the main rewards site by adding a new tab at the top, placed somewhere similar to how the “Stake” tab or section is handled. This should link to or display the balance info seamlessly.
+Detailed instructions:
+	•	Scan the codebase for the navigation bar or top menu (likely in Header.js or NavBar component).
+	•	Add a new tab element, e.g., 
+	•	Balance
+	•	or use routing if it’s a SPA (Single Page App) with React Router.
+	•	Style it to match existing tabs: Use the same font, color scheme (dark theme with green accents), hover effects, and positioning.
+	•	The tab should display or link to the balance widget (showing “$0” or dynamic value with coin symbol).
+	•	Integrate with backend if needed: If balance is fetched from API or database, ensure the tab pulls real-time data.
+	•	Make it responsive: On mobile, convert to a hamburger menu if necessary.
+	•	Reference the “Stake” section for similarity: Mirror its layout, perhaps with a dropdown showing wallet details.
+	•	Test navigation: Click the tab, ensure no 404 errors, and balance displays correctly.
+	•	Commit: “Added top balance tab mirroring Stake layout.”
+Prompt 3: Removing “Enter Your Stake ID” from LukeRewards Spin Section
+You are a Replit AI agent modifying the lukerewards.com codebase. The client circled and wants to remove the “Enter Your Stake ID” input or section in the LukeRewards Spin area, as it’s unnecessary or basic.
+Detailed instructions:
+	•	Find the relevant file (likely Spin.js, RewardsPage.html, or a component for the spin feature).
+	•	Identify the element: It’s probably an input field like with surrounding div or form.
+	•	Completely remove the HTML element and any associated JS logic (e.g., form submission handlers).
+	•	Clean up CSS: Remove any styles specific to this element to avoid dead code.
+	•	Ensure the removal doesn’t break the spin functionality: If Stake ID was used for verification, note it but don’t reimplement unless specified.
+	•	Update any backend endpoints if this was tied to API calls.
+	•	Preview: Load the spin page, confirm the input is gone, and the layout adjusts nicely (no empty spaces).
+	•	Commit: “Removed Enter Your Stake ID as per client request.”
+Prompt 4: Making the Three Main Boxes the Same Size in Ticket Status
+You are a Replit AI agent updating lukerewards.com. The client wants the three main boxes in the Ticket Status section (likely Total Wagered, Cases Opened, Cases Available) to be the same size for uniformity.
+Detailed instructions:
+	•	Locate the section: Probably in Dashboard.js or TicketStatus component, using grid or flex layout.
+	•	Identify the boxes: They are card-like elements with values like “$29,216.39”, “1”, “28”.
+	•	Adjust CSS: Set fixed widths/heights, e.g., width: 200px; height: 100px; or use flex: 1; for equal flex-grow.
+	•	Ensure same padding, margins, borders, and font sizes across all.
+	•	Handle the fourth box if present (Spins Left): Make sure all four are uniform if it’s part of the row.
+	•	Responsive design: On mobile, stack them vertically but keep sizes consistent.
+	•	Test: Resize browser, confirm boxes are identical in dimensions without distortion.
+	•	Commit: “Equalized sizes of main Ticket Status boxes.”
+Prompt 5: Removing the Wording “$1,000 Wagered $28,000 Worth”
+You are a Replit AI agent for lukerewards.com. The client hates the phrasing “$1,000 wagered $28,000 worth” as it looks bad, especially for small wins, and wants it removed or reworded entirely.
+Detailed instructions:
+	•	Search codebase for this string: Likely in a label, tooltip, or display text in Cases Available or similar.
+	•	Remove the entire phrase: Replace with nothing or a neutral alternative like “Cases Value: $28,000” if context requires.
+	•	If it’s dynamic (e.g., calculated), update the JS function to omit this wording.
+	•	Address small win concern: If displaying wins, ensure text like “Win: $5 in 10 cases” is hidden or rephrased to something positive.
+	•	Update any related UI: Ensure no leftover references in HTML/JS.
+	•	Preview: Check the section, confirm the bad wording is gone, and UI flows well.
+	•	Commit: “Removed bad wagering worth wording.”
+Prompt 6: Changing the Color of the Faint Green Line Under Ticket Amount
+You are a Replit AI agent tweaking lukerewards.com UI. The client points to a faint green line under the ticket amount (e.g., under “28”) and wants its color changed as it’s too small/basic.
+Detailed instructions:
+	•	Find the element: Likely a border-bottom or underline in CSS for the ticket count span/div.
+	•	Current color: Faint green (e.g., rgba(0,255,0,0.2)), change to something bolder like #00FF00 or client-preferred (suggest dark green #006400 if unspecified).
+	•	Update CSS: e.g., .ticket-line { border-bottom: 2px solid #00FF00; }
+	•	Make it optional: Add thickness if too faint, e.g., 2px instead of 1px.
+	•	Ensure it doesn’t clash with dark theme.
+	•	Test on mobile/desktop: Confirm visibility improvement.
+	•	Commit: “Changed faint green line color under ticket amount.”
+Prompt 7: Adding a Ticket Symbol Next to the Ticket Amount
+You are a Replit AI agent enhancing lukerewards.com. The client wants a ticket symbol (icon) next to the ticket amount for a cleaner, less basic look.
+Detailed instructions:
+	•	Locate ticket display: e.g., in Tickets Available box showing “28”.
+	•	Add an icon: Use Font Awesome or SVG, e.g., or inline SVG for a ticket shape.
+	•	Position: Place it left or right of the number, with spacing (margin: 5px).
+	•	Style: Match theme – white or green color, size 1.5em.
+	•	If no icon library, import one (e.g., CDN for Font Awesome).
+	•	Responsive: Scale icon on mobile.
+	•	Test: Ensure it looks cleaner, no overlap.
+	•	Commit: “Added ticket symbol next to amount.”
+Prompt 8: Addressing Lack of Verification for Spins
+You are a Replit AI agent securing lukerewards.com. The client is concerned about lack of verification: Stake IDs aren’t public on leaderboards, but what if someone takes another’s spin? Implement better verification.
+Detailed instructions:
+	•	Analyze current system: Spins tied to Stake ID, but no strong auth.
+	•	Add verification: Implement user login/session, or email/OTP for spin claims.
+	•	For leaderboards: Mask Stake IDs partially (e.g., show last 4 digits).
+	•	Backend: Use database to track unique spins per user, prevent duplicates.
+	•	If using Google Sheets, add a verification column.
+	•	UI: Add a “Verify Spin” button or modal.
+	•	Security: Use HTTPS, hash IDs if needed.
+	•	Test: Simulate spin theft, ensure blocked.
+	•	Commit: “Added spin verification to prevent theft.”
+Prompt 9: Not Using NGR Sheet for Ticket Counting; No Past Wagers
+You are a Replit AI agent integrating data for lukerewards.com. The client says NOT to use the NGR sheet for counting tickets, as it includes past wagers which would lose money. Use only current/weighted.
+Detailed instructions:
+	•	Identify NGR integration: Likely API or script pulling from unweighted NGR Google Sheet.
+	•	Disable ticket counting from NGR: Remove any functions calculating tickets based on past data.
+	•	Switch to new sheets: Use provided weighted sheets for current year (2026).
+	•	Logic: Tickets = weighted wagers / 1000, ignore historical.
+	•	Update database: Track only new wagers.
+	•	Test: Input sample data, confirm no past counting.
+	•	Commit: “Stopped using NGR for tickets; no past wagers.”
+Prompt 10: Using New Sheets for Weighted Wagers; $1000 = One Ticket
+You are a Replit AI agent for lukerewards.com data handling. Use the new Google Sheets for tracking weighted wagers, where $1000 weighted wager gives one ticket. Database tracks tickets and prizes.
+Detailed instructions:
+	•	Integrate sheets: Use Google Sheets API (install gspread if needed, but since no pip, use alternative or assume setup).
+	•	Links: .us - https://docs.google.com/spreadsheets/d/1p9Ab7UOEyjweka4JVla86dfv19ThCmblUhaR4rbj/5INA/edit?usp=sharing .com - https://docs.google.com/spreadsheets/d/1mCyxOQPg9vd9pD5QZP5XAd5G6aKDBqvgchB6yu5fwlM/edit?usp=sharing
+	•	Logic: Fetch weighted wagers, tickets = floor(weighted / 1000).
+	•	Database: Use SQLite/Replit DB to store tickets, prizes per user.
+	•	Update cron/job: Periodically sync sheets to DB.
+	•	Handle both .us and .com separately.
+	•	Test: Mock data, confirm ticket calc.
+	•	Commit: “Integrated new weighted sheets; $1000=1 ticket.”
+Prompt 11: Changing “Ticket Status” to “Lifetime Stats”
+You are a Replit AI agent renaming UI in lukerewards.com. Change the section header from “Ticket Status” to “Lifetime Stats”.
+Detailed instructions:
+	•	Find the element: Likely  Ticket Status in Dashboard.html or component.
+	•	Replace text: To “Lifetime Stats”, keep same styling (font, color).
+	•	Update any tabs/menus referencing it.
+	•	Ensure no functional change, just label.
+	•	Test: Load page, confirm new header.
+	•	Commit: “Renamed Ticket Status to Lifetime Stats.”
+Prompt 12: Adding Progression Tracking with a Bar
+You are a Replit AI agent adding features to lukerewards.com. Add better progression tracking, like a progress bar showing e.g., $880 wager = 88%/100% towards next ticket.
+Detailed instructions:
+	•	In Lifetime Stats section: Add a progress bar element.
+	•	Use HTML or CSS div with width %.
+	•	Calc: Progress = (current_wager % 1000) / 1000 * 100.
+	•	Display: “$880 / $1000 (88%)” with bar.
+	•	Dynamic: Fetch from DB/sheets on load.
+	•	Style: Green fill, dark background, responsive.
+	•	Leave tickets/spins display as is.
+	•	Test: Simulate wagers, bar updates.
+	•	Commit: “Added progression bar for wagers.”
+Prompt 13: Using NGR for Unweighted but New Sheets for Lifetime Stats
+You are a Replit AI agent managing data sources for lukerewards.com. Use NGR sheet (unweighted numbers) but leverage the new weighted sheets specifically for showing lifetime stats per user.
+Detailed instructions:
+	•	Dual integration: Pull unweighted from NGR for basic calcs.
+	•	For lifetime stats: Use new sheets for weighted race stats (2026).
+	•	UI: In Lifetime Stats, display from weighted sheets.
+	•	API: Set up endpoints to query both.
+	•	Handle complexity: Map users across sheets.
+	•	Test: User query shows correct lifetime from new, others from NGR.
+	•	Commit: “Configured NGR for unweighted, new sheets for lifetime stats.”
