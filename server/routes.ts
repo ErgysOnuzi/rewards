@@ -12,7 +12,7 @@ import type {
   LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
-import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash } from "./lib/sheets";
+import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
@@ -119,13 +119,19 @@ export async function registerRoutes(
     try {
       const parsed = lookupRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
+      const domain = parsed.domain || "com";
 
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
         return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
-      const ticketsTotal = calculateTickets(wagerRow.wageredAmount);
+      // Use weighted wager from domain-specific sheet for ticket calculation
+      // Fall back to NGR data if weighted wager not found
+      const weightedWager = getWeightedWager(stakeId, domain);
+      const wagerForTickets = weightedWager > 0 ? weightedWager : wagerRow.wageredAmount;
+      
+      const ticketsTotal = calculateTickets(wagerForTickets);
       const ticketsUsed = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
       
@@ -136,7 +142,7 @@ export async function registerRoutes(
       const response: LookupResponse = {
         stake_id: wagerRow.stakeId,
         period_label: wagerRow.periodLabel,
-        wagered_amount: wagerRow.wageredAmount,
+        wagered_amount: wagerForTickets, // Show the wager amount used for ticket calc
         tickets_total: ticketsTotal,
         tickets_used: ticketsUsed,
         tickets_remaining: ticketsRemaining,

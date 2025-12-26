@@ -233,6 +233,7 @@ export const stakeIdSchema = z
 
 export const lookupRequestSchema = z.object({
   stake_id: stakeIdSchema,
+  domain: z.enum(["us", "com"]).optional().default("com"), // Stake domain for weighted wager lookup
 });
 
 // Simplified spin request - just stake_id, no tiers
