@@ -1,4 +1,5 @@
 import { useState } from "react";
+import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
 import StakeIdForm from "@/components/StakeIdForm";
 import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatus";
@@ -212,6 +213,12 @@ export default function Home() {
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      <Header 
+        walletBalance={ticketData?.walletBalance}
+        ticketsRemaining={ticketData?.ticketsRemaining}
+        stakeId={ticketData?.stakeId}
+      />
+      
       <main className="flex-1">
         <div className="max-w-4xl mx-auto px-4 space-y-12">
           <HeroSection />
