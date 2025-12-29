@@ -124,9 +124,16 @@ Navigate to `/admin` and enter the ADMIN_PASSWORD to access the control panel.
 - **Authentication**: Replit OAuth integration for Google Sheets
 
 ### Dual Sheet System
-- **NGR Sheet**: Primary sheet for user lookup (unweighted data)
-- **Weighted Sheets**: Domain-specific sheets for ticket calculation (.us and .com)
-- Tickets are calculated from weighted wagers when available, falling back to NGR data
+- **NGR Sheet**: Used for user lookup and displaying lifetime wagered amount
+- **Weighted Sheets (2026)**: Domain-specific sheets for ticket calculation (.us and .com)
+  - Tab name: "Top Wager" with columns "User_name" and "Wagered"
+  - Tickets are calculated from weighted wagers when available, falling back to NGR data
+- **Data Display**: Shows both lifetime wagered (NGR) and 2026 wagered (weighted) when they differ
+
+### Daily Bonus Spin
+- Free spin available once every 24 hours for registered users
+- 1 in 500 chance (0.2%) to win $5
+- Tracked via user_state table (lastBonusSpinAt field)
 
 ### Required Environment Variables
 - `DATABASE_URL` - PostgreSQL connection

@@ -115,6 +115,19 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // Check if user can use daily bonus (once every 24 hours)
+  async function canUseDailyBonus(stakeId: string): Promise<{ canUse: boolean; nextBonusAt?: Date }> {
+    const [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
+    if (!state || !state.lastBonusSpinAt) {
+      return { canUse: true };
+    }
+    const nextBonus = new Date(state.lastBonusSpinAt.getTime() + 24 * 60 * 60 * 1000);
+    if (Date.now() >= nextBonus.getTime()) {
+      return { canUse: true };
+    }
+    return { canUse: false, nextBonusAt: nextBonus };
+  }
+
   app.post("/api/lookup", async (req: Request, res: Response) => {
     try {
       const parsed = lookupRequestSchema.parse(req.body);
@@ -126,10 +139,13 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
-      // Use weighted wager from domain-specific sheet for ticket calculation
-      // Fall back to NGR data if weighted wager not found
+      // NGR sheet = lifetime wagered (for display)
+      const lifetimeWagered = wagerRow.wageredAmount;
+      
+      // Weighted sheets = 2026 wagers (for ticket calculation)
+      // Fall back to NGR if weighted data not available (e.g., new users, empty sheets)
       const weightedWager = getWeightedWager(stakeId, domain);
-      const wagerForTickets = weightedWager > 0 ? weightedWager : wagerRow.wageredAmount;
+      const wagerForTickets = weightedWager > 0 ? weightedWager : lifetimeWagered;
       
       const ticketsTotal = calculateTickets(wagerForTickets);
       const ticketsUsed = await countSpinsForStakeId(stakeId);
@@ -138,17 +154,23 @@ export async function registerRoutes(
       const walletBalance = await getWalletBalance(stakeId);
       const spinBalances = await getSpinBalances(stakeId);
       const pendingWithdrawals = await getPendingWithdrawals(stakeId);
+      
+      // Check daily bonus availability
+      const bonusStatus = await canUseDailyBonus(stakeId);
 
       const response: LookupResponse = {
         stake_id: wagerRow.stakeId,
         period_label: wagerRow.periodLabel,
-        wagered_amount: wagerForTickets, // Show the wager amount used for ticket calc
+        wagered_amount: wagerForTickets,
+        lifetime_wagered: lifetimeWagered,
         tickets_total: ticketsTotal,
         tickets_used: ticketsUsed,
         tickets_remaining: ticketsRemaining,
         wallet_balance: walletBalance,
         spin_balances: spinBalances,
         pending_withdrawals: pendingWithdrawals,
+        can_daily_bonus: bonusStatus.canUse,
+        next_bonus_at: bonusStatus.nextBonusAt?.toISOString(),
       };
 
       return res.json(response);
@@ -321,9 +343,17 @@ export async function registerRoutes(
         }
       }
 
-      // Use case prize system for bonus spin
-      const prize = selectCasePrize(CASE_PRIZES);
-      const isWin = prize.value > 0;
+      // Daily bonus has 1/500 chance to win $5
+      const DAILY_BONUS_WIN_CHANCE = 1 / 500; // 0.2% chance
+      const DAILY_BONUS_PRIZE = 5; // $5 prize
+      
+      const random = Math.random();
+      const isWin = random < DAILY_BONUS_WIN_CHANCE;
+      const prize = {
+        value: isWin ? DAILY_BONUS_PRIZE : 0,
+        label: isWin ? "$5" : "$0",
+        color: isWin ? "green" as const : "grey" as const,
+      };
 
       // Update last bonus spin time
       await db.update(userState).set({ 

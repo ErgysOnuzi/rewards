@@ -12,13 +12,16 @@ export interface SpinBalances {
 export interface TicketData {
   stakeId: string;
   periodLabel?: string;
-  wageredAmount: number;
+  wageredAmount: number;       // From weighted sheets (2026) - for ticket calculation
+  lifetimeWagered: number;     // From NGR sheet - for display
   ticketsTotal: number;
   ticketsUsed: number;
   ticketsRemaining: number;
   walletBalance: number;
   spinBalances: SpinBalances;
   pendingWithdrawals: number;
+  canDailyBonus: boolean;
+  nextBonusAt?: string;
 }
 
 interface TicketStatusProps {
@@ -60,9 +63,10 @@ export default function TicketStatus({ data, onWithdraw }: TicketStatusProps) {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <StatusCard
               icon={<Coins className="w-5 h-5" />}
-              label="Total Wagered"
-              value={`$${data.wageredAmount.toLocaleString()}`}
-              testId="text-wagered-amount"
+              label="Lifetime Wagered"
+              value={`$${data.lifetimeWagered.toLocaleString()}`}
+              subtext={data.wageredAmount !== data.lifetimeWagered ? `2026: $${data.wageredAmount.toLocaleString()}` : undefined}
+              testId="text-lifetime-wagered"
             />
             <StatusCard
               icon={<CheckCircle2 className="w-5 h-5" />}

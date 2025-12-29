@@ -304,13 +304,16 @@ export interface SpinBalances {
 export interface LookupResponse {
   stake_id: string;
   period_label?: string;
-  wagered_amount: number;
+  wagered_amount: number;        // From weighted sheets (2026) - used for ticket calculation
+  lifetime_wagered: number;      // From NGR sheet - for display only
   tickets_total: number;
   tickets_used: number;
   tickets_remaining: number;
   wallet_balance: number;
   spin_balances: SpinBalances;
   pending_withdrawals: number;
+  can_daily_bonus: boolean;      // Whether daily bonus spin is available
+  next_bonus_at?: string;        // ISO timestamp when next bonus is available
 }
 
 export interface SpinResponse {

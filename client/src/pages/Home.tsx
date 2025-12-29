@@ -15,7 +15,17 @@ export default function Home() {
   const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
   const { toast } = useToast();
 
-  const checkBonusStatus = async (stakeId: string) => {
+  const updateBonusStatusFromTicketData = (data: { can_daily_bonus: boolean; next_bonus_at?: string }) => {
+    const nextBonusAt = data.next_bonus_at ? new Date(data.next_bonus_at) : null;
+    const remainingMs = nextBonusAt ? Math.max(0, nextBonusAt.getTime() - Date.now()) : 0;
+    setBonusStatus({
+      available: data.can_daily_bonus,
+      remainingMs,
+      nextBonusAt: data.next_bonus_at ?? null,
+    });
+  };
+  
+  const refreshBonusStatus = async (stakeId: string) => {
     try {
       const response = await fetch("/api/spin/bonus/check", {
         method: "POST",
@@ -26,7 +36,7 @@ export default function Home() {
       setBonusStatus({
         available: data.available,
         remainingMs: data.remaining_ms,
-        nextBonusAt: data.next_bonus_at,
+        nextBonusAt: data.next_bonus_at ?? null,
       });
     } catch (err) {
       console.error("Failed to check bonus status:", err);
@@ -54,15 +64,18 @@ export default function Home() {
         stakeId: data.stake_id,
         periodLabel: data.period_label,
         wageredAmount: data.wagered_amount,
+        lifetimeWagered: data.lifetime_wagered || data.wagered_amount,
         ticketsTotal: data.tickets_total,
         ticketsUsed: data.tickets_used,
         ticketsRemaining: data.tickets_remaining,
         walletBalance: data.wallet_balance || 0,
         spinBalances: data.spin_balances || { bronze: 0, silver: 0, gold: 0 },
         pendingWithdrawals: data.pending_withdrawals || 0,
+        canDailyBonus: data.can_daily_bonus ?? true,
+        nextBonusAt: data.next_bonus_at,
       });
 
-      await checkBonusStatus(stakeId);
+      updateBonusStatusFromTicketData(data);
     } catch (err) {
       const message = err instanceof Error ? err.message : "An error occurred";
       setError(message);
@@ -172,7 +185,7 @@ export default function Home() {
 
   const handleBonusUsed = () => {
     if (ticketData) {
-      checkBonusStatus(ticketData.stakeId);
+      refreshBonusStatus(ticketData.stakeId);
     }
   };
 
