@@ -41,7 +41,7 @@ describe('Security Middleware', () => {
     it('should set Content-Security-Policy header', async () => {
       const response = await request(app).get('/test');
       expect(response.headers['content-security-policy']).toContain("default-src 'self'");
-      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'self' https://lukesdegens.com");
+      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'self' http://lukerewards.com");
     });
 
     it('should set Permissions-Policy header', async () => {
