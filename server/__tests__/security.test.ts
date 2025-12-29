@@ -23,9 +23,9 @@ describe('Security Middleware', () => {
       );
     });
 
-    it('should set X-Frame-Options header to DENY', async () => {
+    it('should set X-Frame-Options header to SAMEORIGIN', async () => {
       const response = await request(app).get('/test');
-      expect(response.headers['x-frame-options']).toBe('DENY');
+      expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
     });
 
     it('should set X-Content-Type-Options header', async () => {
@@ -41,7 +41,7 @@ describe('Security Middleware', () => {
     it('should set Content-Security-Policy header', async () => {
       const response = await request(app).get('/test');
       expect(response.headers['content-security-policy']).toContain("default-src 'self'");
-      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'none'");
+      expect(response.headers['content-security-policy']).toContain("frame-ancestors 'self' https://lukesdegens.com");
     });
 
     it('should set Permissions-Policy header', async () => {

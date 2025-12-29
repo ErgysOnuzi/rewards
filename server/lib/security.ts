@@ -70,7 +70,8 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     `connect-src 'self'${isProduction ? "" : " ws: wss:"} https:`,
     "object-src 'none'",
     "base-uri 'self'",
-    "frame-ancestors 'none'",
+    // Allow iframe embedding from specific trusted domains
+    "frame-ancestors 'self' https://lukesdegens.com https://*.replit.dev https://*.replit.app",
     "form-action 'self'",
   ];
   
@@ -80,8 +81,8 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   
   res.setHeader("Content-Security-Policy", cspDirectives.join("; "));
   
-  // Prevent clickjacking
-  res.setHeader("X-Frame-Options", "DENY");
+  // Allow framing from trusted domains (CSP frame-ancestors takes precedence in modern browsers)
+  res.setHeader("X-Frame-Options", "SAMEORIGIN");
   
   // Prevent MIME type sniffing
   res.setHeader("X-Content-Type-Options", "nosniff");
