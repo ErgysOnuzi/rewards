@@ -139,15 +139,15 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
-      // NGR sheet = lifetime wagered (for display)
+      // NGR sheet = lifetime wagered (for display only)
       const lifetimeWagered = wagerRow.wageredAmount;
       
       // Weighted sheets = 2026 wagers (for ticket calculation)
-      // Fall back to NGR if weighted data not available (e.g., new users, empty sheets)
+      // NO FALLBACK: tickets come ONLY from weighted 2026 sheets
+      // If weighted sheets are empty (still 2025), users have 0 tickets
       const weightedWager = getWeightedWager(stakeId, domain);
-      const wagerForTickets = weightedWager > 0 ? weightedWager : lifetimeWagered;
       
-      const ticketsTotal = calculateTickets(wagerForTickets);
+      const ticketsTotal = calculateTickets(weightedWager);
       const ticketsUsed = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
       
@@ -161,7 +161,7 @@ export async function registerRoutes(
       const response: LookupResponse = {
         stake_id: wagerRow.stakeId,
         period_label: wagerRow.periodLabel,
-        wagered_amount: wagerForTickets,
+        wagered_amount: weightedWager,
         lifetime_wagered: lifetimeWagered,
         tickets_total: ticketsTotal,
         tickets_used: ticketsUsed,
@@ -218,8 +218,12 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
-      // Calculate tickets from wager amount (1 ticket per $1000 wagered)
-      const ticketsTotal = calculateTickets(wagerRow.wageredAmount);
+      // Get domain from request (default to com)
+      const domain = parsed.domain || "com";
+      
+      // Calculate tickets from weighted 2026 sheets ONLY (no NGR fallback)
+      const weightedWager = getWeightedWager(stakeId, domain);
+      const ticketsTotal = calculateTickets(weightedWager);
       const ticketsUsedBefore = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
 

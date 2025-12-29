@@ -239,6 +239,7 @@ export const lookupRequestSchema = z.object({
 // Simplified spin request - just stake_id, no tiers
 export const spinRequestSchema = z.object({
   stake_id: stakeIdSchema,
+  domain: z.enum(["us", "com"]).optional().default("com"),
 });
 
 export const convertSpinsRequestSchema = z.object({
