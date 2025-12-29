@@ -71,7 +71,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     "object-src 'none'",
     "base-uri 'self'",
     // Allow iframe embedding from specific trusted domains
-    "frame-ancestors 'self' http://lukerewards.com https://lukerewards.com http://lukethedegen.com https://lukethedegen.com",
+    "frame-ancestors 'self' http://lukerewards.com https://lukerewards.com http://lukethedegen.com https://lukethedegen.com https://lukesdegens.com https://*.replit.dev https://*.replit.app",
     "form-action 'self'",
   ];
   
