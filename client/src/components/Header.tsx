@@ -1,5 +1,6 @@
-import { Wallet, Ticket } from "lucide-react";
+import { Wallet, Ticket, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 
 interface HeaderProps {
   walletBalance?: number;
@@ -12,13 +13,26 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-center gap-4">
-        {!hasData && (
-          <div className="flex items-center gap-2">
-            <Ticket className="w-5 h-5 text-primary" />
-            <span className="font-semibold text-lg">LukeRewards</span>
-          </div>
-        )}
+      <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
+        <Button
+          variant="ghost"
+          size="sm"
+          asChild
+          data-testid="button-main-site"
+        >
+          <a href="http://lukerewards.com" target="_blank" rel="noopener noreferrer">
+            <ExternalLink className="w-4 h-4 mr-1.5" />
+            Main Site
+          </a>
+        </Button>
+
+        <div className="flex items-center gap-4">
+          {!hasData && (
+            <div className="flex items-center gap-2">
+              <Ticket className="w-5 h-5 text-primary" />
+              <span className="font-semibold text-lg">LukeRewards</span>
+            </div>
+          )}
 
         {hasData && (
           <div className="flex items-center gap-3">
@@ -43,6 +57,9 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
             )}
           </div>
         )}
+        </div>
+
+        <div className="w-[88px]" />
       </div>
     </header>
   );
