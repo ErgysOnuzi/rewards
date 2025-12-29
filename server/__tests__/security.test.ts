@@ -23,9 +23,9 @@ describe('Security Middleware', () => {
       );
     });
 
-    it('should set X-Frame-Options header to SAMEORIGIN', async () => {
+    it('should not set X-Frame-Options header (CSP frame-ancestors handles this)', async () => {
       const response = await request(app).get('/test');
-      expect(response.headers['x-frame-options']).toBe('SAMEORIGIN');
+      expect(response.headers['x-frame-options']).toBeUndefined();
     });
 
     it('should set X-Content-Type-Options header', async () => {

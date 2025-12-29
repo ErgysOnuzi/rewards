@@ -81,8 +81,7 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
   
   res.setHeader("Content-Security-Policy", cspDirectives.join("; "));
   
-  // Allow framing from trusted domains (CSP frame-ancestors takes precedence in modern browsers)
-  res.setHeader("X-Frame-Options", "SAMEORIGIN");
+  // X-Frame-Options removed - CSP frame-ancestors handles iframe security
   
   // Prevent MIME type sniffing
   res.setHeader("X-Content-Type-Options", "nosniff");
