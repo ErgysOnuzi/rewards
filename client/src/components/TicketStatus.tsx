@@ -95,6 +95,13 @@ export default function TicketStatus({ data, onWithdraw }: TicketStatusProps) {
               {progressPercent.toFixed(0)}% toward next ticket
             </p>
           </div>
+
+          <div className="flex items-center justify-center gap-2 pt-2 border-t border-muted">
+            <Ticket className="w-4 h-4 text-primary/60" />
+            <span className="text-xs text-muted-foreground font-medium">
+              lukerewards.com
+            </span>
+          </div>
         </CardContent>
       </Card>
 
@@ -141,6 +148,13 @@ export default function TicketStatus({ data, onWithdraw }: TicketStatusProps) {
                 Withdraw ${availableBalance > 0 ? availableBalance : 0} to Stake
               </Button>
             </div>
+          </div>
+
+          <div className="flex items-center justify-center gap-2 pt-2 border-t border-muted">
+            <Wallet className="w-4 h-4 text-yellow-500/60" />
+            <span className="text-xs text-muted-foreground font-medium">
+              lukerewards.com
+            </span>
           </div>
         </CardContent>
       </Card>
