@@ -46,11 +46,6 @@ export default function TicketStatus({ data, onWithdraw }: TicketStatusProps) {
         <CardHeader className="flex flex-row items-center justify-between gap-4 pb-4">
           <div className="flex items-center gap-3">
             <CardTitle className="text-xl font-semibold">Lifetime Stats</CardTitle>
-            {data.periodLabel && (
-              <Badge variant="secondary" className="text-xs">
-                {data.periodLabel}
-              </Badge>
-            )}
           </div>
           <Badge 
             variant={hasTickets ? "default" : "secondary"}
@@ -65,7 +60,6 @@ export default function TicketStatus({ data, onWithdraw }: TicketStatusProps) {
               icon={<Coins className="w-5 h-5" />}
               label="Lifetime Wagered"
               value={`$${data.lifetimeWagered.toLocaleString()}`}
-              subtext={data.wageredAmount !== data.lifetimeWagered ? `2026: $${data.wageredAmount.toLocaleString()}` : undefined}
               testId="text-lifetime-wagered"
             />
             <StatusCard
