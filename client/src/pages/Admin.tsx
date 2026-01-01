@@ -529,7 +529,20 @@ export default function Admin() {
                 </CardTitle>
                 <CardDescription>These actions cannot be undone</CardDescription>
               </CardHeader>
-              <CardContent>
+              <CardContent className="space-y-4">
+                <div className="p-3 bg-muted rounded-lg text-sm">
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="text-muted-foreground">Current Environment:</span>
+                    <Badge variant={window.location.hostname.includes('replit.app') || window.location.hostname.includes('lukerewards') ? "destructive" : "secondary"}>
+                      {window.location.hostname.includes('replit.dev') ? "Development" : "Production"}
+                    </Badge>
+                  </div>
+                  <p className="text-muted-foreground text-xs">
+                    {window.location.hostname.includes('replit.dev') 
+                      ? "You are in development mode. Reset will only affect the development database."
+                      : "You are in production mode. Reset will affect the LIVE production database."}
+                  </p>
+                </div>
                 {!showResetConfirm ? (
                   <Button 
                     variant="destructive" 
@@ -541,9 +554,10 @@ export default function Admin() {
                 ) : (
                   <div className="space-y-3 p-4 bg-destructive/10 rounded-lg">
                     <p className="text-sm text-destructive font-medium">
-                      This will permanently delete all spin logs, wallets, withdrawals, and user data.
+                      This will permanently delete all spin logs, wallets, withdrawals, and user data
+                      {!window.location.hostname.includes('replit.dev') && " from the PRODUCTION database"}.
                     </p>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 flex-wrap">
                       <Button 
                         variant="destructive" 
                         onClick={() => resetData.mutate()}
