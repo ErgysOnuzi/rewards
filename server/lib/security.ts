@@ -70,8 +70,8 @@ export function securityHeaders(req: Request, res: Response, next: NextFunction)
     `connect-src 'self'${isProduction ? "" : " ws: wss:"} https:`,
     "object-src 'none'",
     "base-uri 'self'",
-    // Allow iframe embedding from specific trusted domains
-    "frame-ancestors 'self' http://lukerewards.com https://lukerewards.com http://www.lukerewards.com https://www.lukerewards.com http://lukethedegen.com https://lukethedegen.com http://www.lukethedegen.com https://www.lukethedegen.com http://*.replit.dev https://*.replit.dev http://*.replit.app https://*.replit.app",
+    // Allow iframe embedding only on specified trusted domains
+    "frame-ancestors 'self' https://lukerewards.com https://lukethedegen.com",
     "form-action 'self'",
   ];
   
