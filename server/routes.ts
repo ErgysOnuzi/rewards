@@ -5,7 +5,7 @@ import {
   purchaseSpinsRequestSchema, withdrawRequestSchema, processWithdrawalSchema,
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
-  userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState,
+  userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
   CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances
 } from "@shared/schema";
 import type { 
@@ -1281,6 +1281,42 @@ export async function registerRoutes(
       rowCount: allData.length,
       data: allData,
     });
+  });
+
+  // =================== DATA RESET ===================
+  app.post("/api/admin/reset-data", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { confirm } = req.body;
+      if (confirm !== "RESET_ALL_DATA") {
+        return res.status(400).json({ 
+          message: "Confirmation required. Send { confirm: 'RESET_ALL_DATA' } to proceed." 
+        });
+      }
+      
+      await db.delete(spinLogs);
+      await db.delete(walletTransactions);
+      await db.delete(userSpinBalances);
+      await db.delete(userWallets);
+      await db.delete(withdrawalRequests);
+      await db.delete(userState);
+      await db.delete(payouts);
+      await db.delete(rateLimitLogs);
+      await db.delete(guaranteedWins);
+      
+      return res.json({ 
+        message: "All user data has been reset successfully.",
+        tables_cleared: [
+          "spin_logs", "wallet_transactions", "user_spin_balances", 
+          "user_wallets", "withdrawal_requests", "user_state",
+          "payouts", "rate_limit_logs", "guaranteed_wins"
+        ]
+      });
+    } catch (err) {
+      console.error("Data reset error:", err);
+      return res.status(500).json({ message: "Failed to reset data" });
+    }
   });
 
   return httpServer;

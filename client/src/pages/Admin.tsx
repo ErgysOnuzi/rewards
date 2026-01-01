@@ -267,6 +267,28 @@ export default function Admin() {
     },
   });
 
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const resetData = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/reset-data", { 
+        method: "POST", 
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "RESET_ALL_DATA" })
+      });
+      if (!res.ok) throw new Error("Failed to reset data");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setShowResetConfirm(false);
+      toast({ title: "Data Reset Complete", description: data.message });
+      queryClient.invalidateQueries();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to reset data", description: err.message, variant: "destructive" });
+    },
+  });
+
   const userLookup = async () => {
     if (!lookupId.trim()) return;
     const res = await fetch(`/api/admin/user-lookup/${encodeURIComponent(lookupId)}`, { credentials: "include" });
@@ -494,6 +516,50 @@ export default function Admin() {
                 {dataStatus?.duplicates && dataStatus.duplicates.length > 0 && (
                   <div className="md:col-span-2">
                     <p className="text-sm text-destructive">Duplicate usernames: {dataStatus.duplicates.join(", ")}</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            <Card className="border-destructive/50">
+              <CardHeader>
+                <CardTitle className="text-destructive flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5" />
+                  Danger Zone
+                </CardTitle>
+                <CardDescription>These actions cannot be undone</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!showResetConfirm ? (
+                  <Button 
+                    variant="destructive" 
+                    onClick={() => setShowResetConfirm(true)}
+                    data-testid="button-reset-data"
+                  >
+                    Reset All User Data
+                  </Button>
+                ) : (
+                  <div className="space-y-3 p-4 bg-destructive/10 rounded-lg">
+                    <p className="text-sm text-destructive font-medium">
+                      This will permanently delete all spin logs, wallets, withdrawals, and user data.
+                    </p>
+                    <div className="flex gap-2">
+                      <Button 
+                        variant="destructive" 
+                        onClick={() => resetData.mutate()}
+                        disabled={resetData.isPending}
+                        data-testid="button-confirm-reset"
+                      >
+                        {resetData.isPending ? "Resetting..." : "Yes, Reset Everything"}
+                      </Button>
+                      <Button 
+                        variant="outline" 
+                        onClick={() => setShowResetConfirm(false)}
+                        data-testid="button-cancel-reset"
+                      >
+                        Cancel
+                      </Button>
+                    </div>
                   </div>
                 )}
               </CardContent>
