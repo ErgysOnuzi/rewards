@@ -17,8 +17,8 @@ export default function HeroSection() {
           className="text-5xl md:text-6xl font-bold tracking-tight"
           data-testid="text-hero-title"
         >
-          LukeRewards{" "}
-          <span className="text-primary">Spins</span>
+          Spin{" "}
+          <span className="text-primary">Rewards</span>
         </h1>
         
         <p 

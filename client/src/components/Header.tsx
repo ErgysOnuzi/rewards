@@ -30,7 +30,7 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
           {!hasData && (
             <div className="flex items-center gap-2">
               <Ticket className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-lg">LukeRewards</span>
+              <span className="font-semibold text-lg">Spin Rewards</span>
             </div>
           )}
 
