@@ -805,6 +805,7 @@ export async function registerRoutes(
     if (!await requireAdmin(req, res)) return;
     
     const cacheStatus = getCacheStatus();
+    const weightedStatus = getWeightedCacheStatus();
     const allData = getAllWagerData();
     
     // Find duplicates
@@ -824,6 +825,22 @@ export async function registerRoutes(
       ...cacheStatus,
       duplicateCount: duplicates.length,
       duplicates: duplicates.slice(0, 20),
+      // Weighted sheets status
+      weightedSheets: {
+        us: {
+          sheetId: config.weightedSheetsUs ? `...${config.weightedSheetsUs.slice(-8)}` : "Not configured",
+          tabName: config.weightedSheetName,
+          loaded: weightedStatus.usLoaded,
+          rowCount: weightedStatus.usRowCount,
+        },
+        com: {
+          sheetId: config.weightedSheetsCom ? `...${config.weightedSheetsCom.slice(-8)}` : "Not configured",
+          tabName: config.weightedSheetName,
+          loaded: weightedStatus.comLoaded,
+          rowCount: weightedStatus.comRowCount,
+        },
+        lastRefresh: weightedStatus.lastRefresh?.toISOString() || null,
+      },
     });
   });
 

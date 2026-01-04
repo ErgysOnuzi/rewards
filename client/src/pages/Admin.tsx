@@ -53,6 +53,13 @@ interface UserFlag {
   updatedAt: string;
 }
 
+interface WeightedSheetStatus {
+  sheetId: string;
+  tabName: string;
+  loaded: boolean;
+  rowCount: number;
+}
+
 interface DataStatus {
   sheetId: string;
   tabName: string;
@@ -66,6 +73,11 @@ interface DataStatus {
   duplicates: string[];
   backgroundRefreshActive: boolean;
   nextRefreshIn: number;
+  weightedSheets?: {
+    us: WeightedSheetStatus;
+    com: WeightedSheetStatus;
+    lastRefresh: string | null;
+  };
 }
 
 interface RateStats {
@@ -520,6 +532,56 @@ export default function Admin() {
                 )}
               </CardContent>
             </Card>
+
+            {dataStatus?.weightedSheets && (
+              <div className="grid md:grid-cols-2 gap-4">
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Database className="w-4 h-4" />
+                      Weighted Sheet (US)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus.weightedSheets.us.sheetId}</span></div>
+                    <div><span className="text-muted-foreground">Tab:</span> {dataStatus.weightedSheets.us.tabName}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-muted-foreground">Status:</span>
+                      <Badge variant={dataStatus.weightedSheets.us.loaded ? "default" : "destructive"}>
+                        {dataStatus.weightedSheets.us.loaded ? "Loaded" : "Not Loaded"}
+                      </Badge>
+                    </div>
+                    <div><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus.weightedSheets.us.rowCount}</div>
+                  </CardContent>
+                </Card>
+
+                <Card>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-base flex items-center gap-2">
+                      <Database className="w-4 h-4" />
+                      Weighted Sheet (COM)
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus.weightedSheets.com.sheetId}</span></div>
+                    <div><span className="text-muted-foreground">Tab:</span> {dataStatus.weightedSheets.com.tabName}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-muted-foreground">Status:</span>
+                      <Badge variant={dataStatus.weightedSheets.com.loaded ? "default" : "destructive"}>
+                        {dataStatus.weightedSheets.com.loaded ? "Loaded" : "Not Loaded"}
+                      </Badge>
+                    </div>
+                    <div><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus.weightedSheets.com.rowCount}</div>
+                  </CardContent>
+                </Card>
+
+                {dataStatus.weightedSheets.lastRefresh && (
+                  <div className="md:col-span-2 text-sm text-muted-foreground">
+                    Last weighted data refresh: {formatDate(dataStatus.weightedSheets.lastRefresh)}
+                  </div>
+                )}
+              </div>
+            )}
 
             <Card className="border-destructive/50">
               <CardHeader>
