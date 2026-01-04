@@ -496,7 +496,10 @@ export default function Admin() {
           <TabsContent value="status" className="space-y-4">
             <Card>
               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-                <CardTitle className="text-lg sm:text-xl">Data Status</CardTitle>
+                <div>
+                  <CardTitle className="text-lg sm:text-xl">NGR Sheet (Lifetime Data)</CardTitle>
+                  <p className="text-xs text-muted-foreground mt-1">Shows lifetime wagered amounts for display purposes only</p>
+                </div>
                 <Button onClick={() => refreshCache.mutate()} disabled={refreshCache.isPending} size="sm" data-testid="button-refresh-cache">
                   <RefreshCw className={`w-4 h-4 mr-2 ${refreshCache.isPending ? "animate-spin" : ""}`} />
                   Refresh Cache
@@ -541,6 +544,7 @@ export default function Admin() {
                       <Database className="w-4 h-4" />
                       Weighted Sheet (US)
                     </CardTitle>
+                    <p className="text-xs text-muted-foreground">Used to calculate tickets for Stake.us users</p>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus.weightedSheets.us.sheetId}</span></div>
@@ -552,6 +556,12 @@ export default function Admin() {
                       </Badge>
                     </div>
                     <div><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus.weightedSheets.us.rowCount}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-muted-foreground">Auto-Refresh:</span>
+                      <Badge variant={dataStatus?.backgroundRefreshActive ? "default" : "secondary"}>
+                        {dataStatus?.backgroundRefreshActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
                   </CardContent>
                 </Card>
 
@@ -561,6 +571,7 @@ export default function Admin() {
                       <Database className="w-4 h-4" />
                       Weighted Sheet (COM)
                     </CardTitle>
+                    <p className="text-xs text-muted-foreground">Used to calculate tickets for Stake.com users</p>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
                     <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus.weightedSheets.com.sheetId}</span></div>
@@ -572,6 +583,12 @@ export default function Admin() {
                       </Badge>
                     </div>
                     <div><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus.weightedSheets.com.rowCount}</div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-muted-foreground">Auto-Refresh:</span>
+                      <Badge variant={dataStatus?.backgroundRefreshActive ? "default" : "secondary"}>
+                        {dataStatus?.backgroundRefreshActive ? "Active" : "Inactive"}
+                      </Badge>
+                    </div>
                   </CardContent>
                 </Card>
 
