@@ -3,8 +3,7 @@ import { index, jsonb, pgTable, timestamp, varchar, boolean, serial, text } from
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
-// Session storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// Session storage table for custom auth
 export const sessions = pgTable(
   "sessions",
   {
@@ -15,14 +14,12 @@ export const sessions = pgTable(
   (table) => [index("IDX_session_expire").on(table.expire)]
 );
 
-// User storage table.
-// (IMPORTANT) This table is mandatory for Replit Auth, don't drop it.
+// User storage table with custom auth (username/password)
 export const users = pgTable("users", {
   id: varchar("id").primaryKey().default(sql`gen_random_uuid()`),
-  email: varchar("email").unique(),
-  firstName: varchar("first_name"),
-  lastName: varchar("last_name"),
-  profileImageUrl: varchar("profile_image_url"),
+  username: varchar("username").unique().notNull(),
+  passwordHash: varchar("password_hash").notNull(),
+  email: varchar("email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
   // Stake verification fields
@@ -36,13 +33,14 @@ export const users = pgTable("users", {
 export type UpsertUser = typeof users.$inferInsert;
 export type User = typeof users.$inferSelect;
 
-// Verification requests table - for admin review of bet ID submissions
+// Verification requests table - for admin review of screenshot uploads
 export const verificationRequests = pgTable("verification_requests", {
   id: serial("id").primaryKey(),
   userId: varchar("user_id").notNull().references(() => users.id),
   stakeUsername: varchar("stake_username").notNull(),
   stakePlatform: varchar("stake_platform").notNull(), // "us" or "com"
-  betId: varchar("bet_id").notNull(), // Stake bet ID for verification
+  screenshotUrl: text("screenshot_url").notNull(), // URL/path to uploaded screenshot
+  screenshotFilename: varchar("screenshot_filename"), // Original filename
   status: varchar("status").default("pending").notNull(), // "pending", "approved", "rejected"
   adminNotes: text("admin_notes"),
   createdAt: timestamp("created_at").defaultNow().notNull(),
@@ -59,5 +57,21 @@ export const insertVerificationRequestSchema = createInsertSchema(verificationRe
   adminNotes: true,
 });
 
+// Registration schema
+export const registerSchema = z.object({
+  username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be at most 30 characters")
+    .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
+  password: z.string().min(8, "Password must be at least 8 characters"),
+  email: z.string().email().optional(),
+});
+
+// Login schema
+export const loginSchema = z.object({
+  username: z.string().min(1, "Username is required"),
+  password: z.string().min(1, "Password is required"),
+});
+
+export type RegisterInput = z.infer<typeof registerSchema>;
+export type LoginInput = z.infer<typeof loginSchema>;
 export type VerificationRequest = typeof verificationRequests.$inferSelect;
 export type InsertVerificationRequest = z.infer<typeof insertVerificationRequestSchema>;

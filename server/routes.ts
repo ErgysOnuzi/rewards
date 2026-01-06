@@ -7,8 +7,12 @@ import {
   withdrawalRequests, walletTransactions,
   userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
   CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances,
-  users, verificationRequests
+  users, verificationRequests, registerSchema, loginSchema
 } from "@shared/schema";
+import bcrypt from "bcrypt";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
 import type { 
   LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
@@ -111,11 +115,374 @@ async function checkUserBlacklist(stakeId: string): Promise<{ blacklisted: boole
   }
 }
 
+// Configure multer for file uploads
+const uploadsDir = path.join(process.cwd(), "uploads", "verification");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
+
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, uploadsDir);
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const ext = path.extname(file.originalname);
+    cb(null, `verification-${uniqueSuffix}${ext}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max
+  },
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
+    if (allowedTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Only image files (JPEG, PNG, GIF, WebP) are allowed"));
+    }
+  },
+});
+
+// Password hashing configuration
+const SALT_ROUNDS = 12;
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
 ): Promise<Server> {
   
+  // =================== CUSTOM AUTHENTICATION ===================
+  
+  // Register new user
+  app.post("/api/auth/register", async (req: Request, res: Response) => {
+    try {
+      const parsed = registerSchema.parse(req.body);
+      const { username, password, email } = parsed;
+      
+      // Check if username already exists
+      const [existing] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
+      if (existing) {
+        return res.status(400).json({ message: "Username already taken" });
+      }
+      
+      // Hash password
+      const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+      
+      // Create user
+      const [newUser] = await db.insert(users).values({
+        username: username.toLowerCase(),
+        passwordHash,
+        email: email || null,
+      }).returning();
+      
+      // Set session
+      (req.session as any).userId = newUser.id;
+      
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: username,
+        details: "User registration successful",
+      });
+      
+      return res.json({
+        success: true,
+        user: {
+          id: newUser.id,
+          username: newUser.username,
+          verificationStatus: newUser.verificationStatus,
+        },
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" });
+      }
+      console.error("Registration error:", err);
+      return res.status(500).json({ message: "Registration failed" });
+    }
+  });
+  
+  // Login
+  app.post("/api/auth/login", async (req: Request, res: Response) => {
+    try {
+      const parsed = loginSchema.parse(req.body);
+      const { username, password } = parsed;
+      
+      // Find user
+      const [user] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
+      if (!user) {
+        logSecurityEvent({
+          type: "auth_failure",
+          ipHash: hashForLogging(getClientIpForSecurity(req)),
+          stakeId: username,
+          details: "Login failed - user not found",
+        });
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Verify password
+      const validPassword = await bcrypt.compare(password, user.passwordHash);
+      if (!validPassword) {
+        logSecurityEvent({
+          type: "auth_failure",
+          ipHash: hashForLogging(getClientIpForSecurity(req)),
+          stakeId: username,
+          details: "Login failed - invalid password",
+        });
+        return res.status(401).json({ message: "Invalid username or password" });
+      }
+      
+      // Set session
+      (req.session as any).userId = user.id;
+      
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: username,
+        details: "User login successful",
+      });
+      
+      return res.json({
+        success: true,
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          stakeUsername: user.stakeUsername,
+          stakePlatform: user.stakePlatform,
+          verificationStatus: user.verificationStatus,
+          securityDisclaimerAccepted: user.securityDisclaimerAccepted,
+        },
+      });
+    } catch (err) {
+      if (err instanceof ZodError) {
+        return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" });
+      }
+      console.error("Login error:", err);
+      return res.status(500).json({ message: "Login failed" });
+    }
+  });
+  
+  // Logout
+  app.post("/api/auth/logout", (req: Request, res: Response) => {
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Logout error:", err);
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.clearCookie("connect.sid");
+      return res.json({ success: true });
+    });
+  });
+  
+  // Get current session
+  app.get("/api/auth/session", async (req: Request, res: Response) => {
+    const userId = (req.session as any)?.userId;
+    if (!userId) {
+      return res.json({ user: null });
+    }
+    
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.json({ user: null });
+      }
+      
+      return res.json({
+        user: {
+          id: user.id,
+          username: user.username,
+          email: user.email,
+          stakeUsername: user.stakeUsername,
+          stakePlatform: user.stakePlatform,
+          verificationStatus: user.verificationStatus,
+          securityDisclaimerAccepted: user.securityDisclaimerAccepted,
+        },
+      });
+    } catch (err) {
+      console.error("Session check error:", err);
+      return res.json({ user: null });
+    }
+  });
+  
+  // Helper middleware to get current user
+  function getCurrentUser(req: Request): string | null {
+    return (req.session as any)?.userId || null;
+  }
+  
+  // =================== VERIFICATION WITH IMAGE UPLOAD ===================
+  
+  // Submit verification request with screenshot
+  app.post("/api/verification/submit", upload.single("screenshot"), async (req: Request, res: Response) => {
+    const userId = getCurrentUser(req);
+    if (!userId) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    // Rate limit check
+    const rateCheck = checkVerificationRateLimit(userId);
+    if (!rateCheck.allowed) {
+      logSecurityEvent({
+        type: "rate_limit_exceeded",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: userId,
+        details: "Verification submission rate limit exceeded",
+      });
+      return res.status(429).json({ 
+        message: "Too many verification requests. Please try again later.",
+        retry_after: rateCheck.retryAfter 
+      });
+    }
+    
+    try {
+      const { stake_username, stake_platform } = req.body;
+      const file = req.file;
+      
+      if (!stake_username || !stake_platform) {
+        return res.status(400).json({ message: "Missing required fields: stake_username, stake_platform" });
+      }
+      
+      if (!file) {
+        return res.status(400).json({ message: "Screenshot is required" });
+      }
+      
+      if (!["us", "com"].includes(stake_platform)) {
+        return res.status(400).json({ message: "stake_platform must be 'us' or 'com'" });
+      }
+      
+      const normalizedUsername = stake_username.toLowerCase().trim();
+      const screenshotUrl = `/uploads/verification/${file.filename}`;
+      
+      // Use a transaction to prevent race conditions
+      const result = await db.transaction(async (tx) => {
+        // Check if this Stake username is already verified by another user
+        const [existingVerified] = await tx.select().from(users)
+          .where(and(
+            eq(users.stakeUsername, normalizedUsername),
+            eq(users.verificationStatus, "verified")
+          ));
+        
+        if (existingVerified && existingVerified.id !== userId) {
+          throw new Error("STAKE_ALREADY_LINKED");
+        }
+        
+        // Check if user already has a pending verification
+        const [existingPending] = await tx.select().from(verificationRequests)
+          .where(and(
+            eq(verificationRequests.userId, userId),
+            eq(verificationRequests.status, "pending")
+          ));
+        
+        if (existingPending) {
+          throw new Error("PENDING_EXISTS");
+        }
+        
+        // Create verification request with screenshot
+        const [request] = await tx.insert(verificationRequests).values({
+          userId,
+          stakeUsername: normalizedUsername,
+          stakePlatform: stake_platform,
+          screenshotUrl,
+          screenshotFilename: file.originalname,
+        }).returning();
+        
+        // Update user status to pending
+        await tx.update(users).set({
+          stakeUsername: normalizedUsername,
+          stakePlatform: stake_platform,
+          verificationStatus: "pending",
+          updatedAt: new Date(),
+        }).where(eq(users.id, userId));
+        
+        return request;
+      });
+      
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: userId,
+        details: `Verification request submitted for ${normalizedUsername}`,
+      });
+      
+      return res.json({
+        success: true,
+        request_id: result.id,
+        message: "Verification request submitted. An admin will review your screenshot shortly."
+      });
+    } catch (err: any) {
+      if (err.message === "STAKE_ALREADY_LINKED") {
+        return res.status(400).json({ 
+          message: "This Stake username is already linked to another account" 
+        });
+      }
+      if (err.message === "PENDING_EXISTS") {
+        return res.status(400).json({ 
+          message: "You already have a pending verification request" 
+        });
+      }
+      console.error("Verification submit error:", err);
+      return res.status(500).json({ message: "Failed to submit verification request" });
+    }
+  });
+  
+  // Serve uploaded files
+  const express = await import("express");
+  app.use("/uploads", express.default.static(path.join(process.cwd(), "uploads")));
+  
+  // =================== ADMIN USER VERIFICATION QUEUES ===================
+  
+  // Get all users by verification status for admin
+  app.get("/api/admin/users/verification-status", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const allUsers = await db.select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        stakeUsername: users.stakeUsername,
+        stakePlatform: users.stakePlatform,
+        verificationStatus: users.verificationStatus,
+        verifiedAt: users.verifiedAt,
+        createdAt: users.createdAt,
+      }).from(users).orderBy(desc(users.createdAt));
+      
+      const unverified = allUsers.filter(u => u.verificationStatus === "unverified" || !u.verificationStatus);
+      const pending = allUsers.filter(u => u.verificationStatus === "pending");
+      const verified = allUsers.filter(u => u.verificationStatus === "verified");
+      
+      // Get pending verification requests with screenshots
+      const pendingRequests = await db.select({
+        id: verificationRequests.id,
+        userId: verificationRequests.userId,
+        stakeUsername: verificationRequests.stakeUsername,
+        stakePlatform: verificationRequests.stakePlatform,
+        screenshotUrl: verificationRequests.screenshotUrl,
+        screenshotFilename: verificationRequests.screenshotFilename,
+        createdAt: verificationRequests.createdAt,
+        username: users.username,
+      })
+        .from(verificationRequests)
+        .leftJoin(users, eq(verificationRequests.userId, users.id))
+        .where(eq(verificationRequests.status, "pending"))
+        .orderBy(desc(verificationRequests.createdAt));
+      
+      return res.json({
+        unverified,
+        pending,
+        verified,
+        pendingRequests,
+      });
+    } catch (err) {
+      console.error("Admin users verification status error:", err);
+      return res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
   // Check if user can use daily bonus (once every 24 hours)
   async function canUseDailyBonus(stakeId: string): Promise<{ canUse: boolean; nextBonusAt?: Date }> {
     const [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
@@ -1361,119 +1728,8 @@ export async function registerRoutes(
     return { allowed: true };
   }
   
-  // Submit verification request (authenticated users only)
-  app.post("/api/verification/submit", async (req: Request, res: Response) => {
-    const user = req.user as any;
-    if (!user?.claims?.sub) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    
-    const userId = user.claims.sub;
-    
-    // Rate limit check
-    const rateCheck = checkVerificationRateLimit(userId);
-    if (!rateCheck.allowed) {
-      logSecurityEvent({
-        type: "rate_limit_exceeded",
-        ipHash: hashForLogging(getClientIpForSecurity(req)),
-        stakeId: userId,
-        details: "Verification submission rate limit exceeded",
-      });
-      return res.status(429).json({ 
-        message: "Too many verification requests. Please try again later.",
-        retry_after: rateCheck.retryAfter 
-      });
-    }
-    
-    try {
-      const { stake_username, stake_platform, bet_id } = req.body;
-      
-      if (!stake_username || !stake_platform || !bet_id) {
-        return res.status(400).json({ message: "Missing required fields: stake_username, stake_platform, bet_id" });
-      }
-      
-      if (!["us", "com"].includes(stake_platform)) {
-        return res.status(400).json({ message: "stake_platform must be 'us' or 'com'" });
-      }
-      
-      const normalizedUsername = stake_username.toLowerCase().trim();
-      
-      // Sanitize bet_id
-      const sanitizedBetId = bet_id.toString().trim().slice(0, 100);
-      if (!/^[a-zA-Z0-9_-]+$/.test(sanitizedBetId)) {
-        return res.status(400).json({ message: "Invalid bet ID format" });
-      }
-      
-      // Use a transaction to prevent race conditions
-      const result = await db.transaction(async (tx) => {
-        // Check if this Stake username is already verified by another user (with lock)
-        const [existingVerified] = await tx.select().from(users)
-          .where(and(
-            eq(users.stakeUsername, normalizedUsername),
-            eq(users.verificationStatus, "verified")
-          ));
-        
-        if (existingVerified && existingVerified.id !== userId) {
-          throw new Error("STAKE_ALREADY_LINKED");
-        }
-        
-        // Check if user already has a pending verification
-        const [existingPending] = await tx.select().from(verificationRequests)
-          .where(and(
-            eq(verificationRequests.userId, userId),
-            eq(verificationRequests.status, "pending")
-          ));
-        
-        if (existingPending) {
-          throw new Error("PENDING_EXISTS");
-        }
-        
-        // Create verification request
-        const [request] = await tx.insert(verificationRequests).values({
-          userId,
-          stakeUsername: normalizedUsername,
-          stakePlatform: stake_platform,
-          betId: sanitizedBetId,
-        }).returning();
-        
-        // Update user status to pending
-        await tx.update(users).set({
-          stakeUsername: normalizedUsername,
-          stakePlatform: stake_platform,
-          verificationStatus: "pending",
-          updatedAt: new Date(),
-        }).where(eq(users.id, userId));
-        
-        return request;
-      });
-      
-      logSecurityEvent({
-        type: "auth_success",
-        ipHash: hashForLogging(getClientIpForSecurity(req)),
-        stakeId: userId,
-        details: `Verification request submitted for ${normalizedUsername}`,
-      });
-      
-      return res.json({
-        success: true,
-        request_id: result.id,
-        message: "Verification request submitted. An admin will review it shortly."
-      });
-    } catch (err: any) {
-      if (err.message === "STAKE_ALREADY_LINKED") {
-        return res.status(400).json({ 
-          message: "This Stake username is already linked to another account" 
-        });
-      }
-      if (err.message === "PENDING_EXISTS") {
-        return res.status(400).json({ 
-          message: "You already have a pending verification request" 
-        });
-      }
-      console.error("Verification submit error:", err);
-      return res.status(500).json({ message: "Failed to submit verification request" });
-    }
-  });
+  // Submit verification request with screenshot (authenticated users only)
+  // This is handled separately with multer middleware - see below
   
   // Get current user's verification status
   app.get("/api/verification/status", async (req: Request, res: Response) => {
@@ -1542,13 +1798,14 @@ export async function registerRoutes(
         userId: verificationRequests.userId,
         stakeUsername: verificationRequests.stakeUsername,
         stakePlatform: verificationRequests.stakePlatform,
-        betId: verificationRequests.betId,
+        screenshotUrl: verificationRequests.screenshotUrl,
+        screenshotFilename: verificationRequests.screenshotFilename,
         status: verificationRequests.status,
         adminNotes: verificationRequests.adminNotes,
         createdAt: verificationRequests.createdAt,
         processedAt: verificationRequests.processedAt,
         userEmail: users.email,
-        userFirstName: users.firstName,
+        username: users.username,
       })
         .from(verificationRequests)
         .leftJoin(users, eq(verificationRequests.userId, users.id))
