@@ -335,8 +335,17 @@ export async function registerRoutes(
   
   // Submit verification request with screenshot
   app.post("/api/verification/submit", upload.single("screenshot"), async (req: Request, res: Response) => {
+    // Debug logging for session
+    console.log("[Verification] Session check:", {
+      hasSession: !!req.session,
+      sessionId: req.session?.id,
+      userId: (req.session as any)?.userId,
+      cookies: req.cookies ? Object.keys(req.cookies) : [],
+    });
+    
     const userId = getCurrentUser(req);
     if (!userId) {
+      console.log("[Verification] Not authenticated - no userId in session");
       return res.status(401).json({ message: "Not authenticated" });
     }
     
