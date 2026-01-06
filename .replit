@@ -44,4 +44,4 @@ waitForPort = 5000
 GOOGLE_SHEETS_ID = "1Idr4KaCkR5EYdQPyWMqtoUNVpRUPGczLy-UCaJU4jzc"
 
 [agent]
-integrations = ["google-sheet:1.0.0"]
+integrations = ["google-sheet:1.0.0", "javascript_log_in_with_replit:2.0.0"]

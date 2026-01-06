@@ -2,6 +2,9 @@ import { z } from "zod";
 import { pgTable, text, integer, real, timestamp, serial, boolean } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 
+// Re-export auth schema (required for Replit Auth)
+export * from "./models/auth";
+
 // Case prize definition with value, probability, and rarity color
 export interface CasePrize {
   value: number;       // Dollar value of the prize

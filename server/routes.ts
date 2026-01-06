@@ -6,7 +6,8 @@ import {
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
   userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
-  CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances
+  CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances,
+  users, verificationRequests
 } from "@shared/schema";
 import type { 
   LookupResponse, SpinResponse, ErrorResponse,
@@ -1333,6 +1334,298 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Data reset error:", err);
       return res.status(500).json({ message: "Failed to reset data" });
+    }
+  });
+
+  // =================== USER VERIFICATION ===================
+  
+  // Rate limit tracking for verification submissions
+  const verificationRateLimits = new Map<string, { count: number; resetTime: number }>();
+  const VERIFICATION_RATE_LIMIT = 3; // 3 submissions per hour
+  const VERIFICATION_RATE_WINDOW = 60 * 60 * 1000; // 1 hour
+  
+  function checkVerificationRateLimit(userId: string): { allowed: boolean; retryAfter?: number } {
+    const now = Date.now();
+    const limit = verificationRateLimits.get(userId);
+    
+    if (!limit || now > limit.resetTime) {
+      verificationRateLimits.set(userId, { count: 1, resetTime: now + VERIFICATION_RATE_WINDOW });
+      return { allowed: true };
+    }
+    
+    if (limit.count >= VERIFICATION_RATE_LIMIT) {
+      return { allowed: false, retryAfter: Math.ceil((limit.resetTime - now) / 1000) };
+    }
+    
+    limit.count++;
+    return { allowed: true };
+  }
+  
+  // Submit verification request (authenticated users only)
+  app.post("/api/verification/submit", async (req: Request, res: Response) => {
+    const user = req.user as any;
+    if (!user?.claims?.sub) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    const userId = user.claims.sub;
+    
+    // Rate limit check
+    const rateCheck = checkVerificationRateLimit(userId);
+    if (!rateCheck.allowed) {
+      logSecurityEvent({
+        type: "rate_limit_exceeded",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: userId,
+        details: "Verification submission rate limit exceeded",
+      });
+      return res.status(429).json({ 
+        message: "Too many verification requests. Please try again later.",
+        retry_after: rateCheck.retryAfter 
+      });
+    }
+    
+    try {
+      const { stake_username, stake_platform, bet_id } = req.body;
+      
+      if (!stake_username || !stake_platform || !bet_id) {
+        return res.status(400).json({ message: "Missing required fields: stake_username, stake_platform, bet_id" });
+      }
+      
+      if (!["us", "com"].includes(stake_platform)) {
+        return res.status(400).json({ message: "stake_platform must be 'us' or 'com'" });
+      }
+      
+      const normalizedUsername = stake_username.toLowerCase().trim();
+      
+      // Sanitize bet_id
+      const sanitizedBetId = bet_id.toString().trim().slice(0, 100);
+      if (!/^[a-zA-Z0-9_-]+$/.test(sanitizedBetId)) {
+        return res.status(400).json({ message: "Invalid bet ID format" });
+      }
+      
+      // Use a transaction to prevent race conditions
+      const result = await db.transaction(async (tx) => {
+        // Check if this Stake username is already verified by another user (with lock)
+        const [existingVerified] = await tx.select().from(users)
+          .where(and(
+            eq(users.stakeUsername, normalizedUsername),
+            eq(users.verificationStatus, "verified")
+          ));
+        
+        if (existingVerified && existingVerified.id !== userId) {
+          throw new Error("STAKE_ALREADY_LINKED");
+        }
+        
+        // Check if user already has a pending verification
+        const [existingPending] = await tx.select().from(verificationRequests)
+          .where(and(
+            eq(verificationRequests.userId, userId),
+            eq(verificationRequests.status, "pending")
+          ));
+        
+        if (existingPending) {
+          throw new Error("PENDING_EXISTS");
+        }
+        
+        // Create verification request
+        const [request] = await tx.insert(verificationRequests).values({
+          userId,
+          stakeUsername: normalizedUsername,
+          stakePlatform: stake_platform,
+          betId: sanitizedBetId,
+        }).returning();
+        
+        // Update user status to pending
+        await tx.update(users).set({
+          stakeUsername: normalizedUsername,
+          stakePlatform: stake_platform,
+          verificationStatus: "pending",
+          updatedAt: new Date(),
+        }).where(eq(users.id, userId));
+        
+        return request;
+      });
+      
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: userId,
+        details: `Verification request submitted for ${normalizedUsername}`,
+      });
+      
+      return res.json({
+        success: true,
+        request_id: result.id,
+        message: "Verification request submitted. An admin will review it shortly."
+      });
+    } catch (err: any) {
+      if (err.message === "STAKE_ALREADY_LINKED") {
+        return res.status(400).json({ 
+          message: "This Stake username is already linked to another account" 
+        });
+      }
+      if (err.message === "PENDING_EXISTS") {
+        return res.status(400).json({ 
+          message: "You already have a pending verification request" 
+        });
+      }
+      console.error("Verification submit error:", err);
+      return res.status(500).json({ message: "Failed to submit verification request" });
+    }
+  });
+  
+  // Get current user's verification status
+  app.get("/api/verification/status", async (req: Request, res: Response) => {
+    const user = req.user as any;
+    if (!user?.claims?.sub) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    try {
+      const userId = user.claims.sub;
+      const [userData] = await db.select().from(users).where(eq(users.id, userId));
+      
+      if (!userData) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Get any pending requests
+      const pendingRequests = await db.select().from(verificationRequests)
+        .where(and(
+          eq(verificationRequests.userId, userId),
+          eq(verificationRequests.status, "pending")
+        ));
+      
+      return res.json({
+        stake_username: userData.stakeUsername,
+        stake_platform: userData.stakePlatform,
+        verification_status: userData.verificationStatus || "unverified",
+        verified_at: userData.verifiedAt?.toISOString(),
+        security_disclaimer_accepted: userData.securityDisclaimerAccepted,
+        has_pending_request: pendingRequests.length > 0,
+      });
+    } catch (err) {
+      console.error("Verification status error:", err);
+      return res.status(500).json({ message: "Failed to get verification status" });
+    }
+  });
+  
+  // Accept security disclaimer
+  app.post("/api/verification/accept-disclaimer", async (req: Request, res: Response) => {
+    const user = req.user as any;
+    if (!user?.claims?.sub) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    
+    try {
+      const userId = user.claims.sub;
+      await db.update(users).set({
+        securityDisclaimerAccepted: true,
+        updatedAt: new Date(),
+      }).where(eq(users.id, userId));
+      
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Accept disclaimer error:", err);
+      return res.status(500).json({ message: "Failed to accept disclaimer" });
+    }
+  });
+  
+  // Admin: Get all verification requests
+  app.get("/api/admin/verifications", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const requests = await db.select({
+        id: verificationRequests.id,
+        userId: verificationRequests.userId,
+        stakeUsername: verificationRequests.stakeUsername,
+        stakePlatform: verificationRequests.stakePlatform,
+        betId: verificationRequests.betId,
+        status: verificationRequests.status,
+        adminNotes: verificationRequests.adminNotes,
+        createdAt: verificationRequests.createdAt,
+        processedAt: verificationRequests.processedAt,
+        userEmail: users.email,
+        userFirstName: users.firstName,
+      })
+        .from(verificationRequests)
+        .leftJoin(users, eq(verificationRequests.userId, users.id))
+        .orderBy(desc(verificationRequests.createdAt))
+        .limit(100);
+      
+      return res.json({ verifications: requests });
+    } catch (err) {
+      console.error("Admin verifications error:", err);
+      return res.status(500).json({ message: "Failed to fetch verifications" });
+    }
+  });
+  
+  // Admin: Process verification request
+  app.post("/api/admin/verifications/process", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { id, status, admin_notes } = req.body;
+      
+      if (!id || !["approved", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "Invalid request. Provide id and status (approved/rejected)" });
+      }
+      
+      // Use transaction for atomic updates
+      const result = await db.transaction(async (tx) => {
+        const [request] = await tx.select().from(verificationRequests).where(eq(verificationRequests.id, id));
+        if (!request) {
+          throw new Error("NOT_FOUND");
+        }
+        
+        if (request.status !== "pending") {
+          throw new Error("ALREADY_PROCESSED");
+        }
+        
+        // Update verification request
+        await tx.update(verificationRequests).set({
+          status,
+          adminNotes: admin_notes || null,
+          processedAt: new Date(),
+        }).where(eq(verificationRequests.id, id));
+        
+        // Update user status
+        if (status === "approved") {
+          await tx.update(users).set({
+            verificationStatus: "verified",
+            verifiedAt: new Date(),
+            updatedAt: new Date(),
+          }).where(eq(users.id, request.userId));
+        } else {
+          await tx.update(users).set({
+            verificationStatus: "rejected",
+            updatedAt: new Date(),
+          }).where(eq(users.id, request.userId));
+        }
+        
+        return request;
+      });
+      
+      // Audit log for admin action
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: result.stakeUsername,
+        details: `Admin ${status} verification for user ${result.userId}. Notes: ${admin_notes || "none"}`,
+      });
+      
+      return res.json({ success: true, id, status });
+    } catch (err: any) {
+      if (err.message === "NOT_FOUND") {
+        return res.status(404).json({ message: "Verification request not found" });
+      }
+      if (err.message === "ALREADY_PROCESSED") {
+        return res.status(400).json({ message: "Verification request already processed" });
+      }
+      console.error("Process verification error:", err);
+      return res.status(500).json({ message: "Failed to process verification" });
     }
   });
 

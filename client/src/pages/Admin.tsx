@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban, 
   Search, Shield, AlertTriangle, Settings, Download, Database,
-  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity
+  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -127,6 +127,20 @@ interface ExportLog {
   totalTickets: number;
   dataHash: string | null;
   createdAt: string;
+}
+
+interface VerificationRequest {
+  id: number;
+  userId: string;
+  stakeUsername: string;
+  stakePlatform: string;
+  betId: string;
+  status: string;
+  adminNotes: string | null;
+  createdAt: string;
+  processedAt: string | null;
+  userEmail: string | null;
+  userFirstName: string | null;
 }
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -249,6 +263,26 @@ export default function Admin() {
   const { data: exportLogs } = useQuery<{ logs: ExportLog[] }>({
     queryKey: ["/api/admin/export/logs"],
     enabled: isAuthenticated === true,
+  });
+
+  const { data: verificationsData, refetch: refetchVerifications } = useQuery<{ verifications: VerificationRequest[] }>({
+    queryKey: ["/api/admin/verifications"],
+    enabled: isAuthenticated === true,
+  });
+
+  const pendingVerifications = verificationsData?.verifications?.filter(v => v.status === "pending") || [];
+
+  const processVerification = useMutation({
+    mutationFn: async ({ id, status, admin_notes }: { id: number; status: "approved" | "rejected"; admin_notes?: string }) => {
+      return apiRequest("POST", "/api/admin/verifications/process", { id, status, admin_notes });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/verifications"] });
+      toast({ title: "Verification processed" });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to process verification", description: err.message, variant: "destructive" });
+    },
   });
 
   const processWithdrawal = useMutation({
@@ -490,6 +524,10 @@ export default function Admin() {
               <TabsTrigger value="export" data-testid="tab-export" className="text-xs sm:text-sm"><Download className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Export</span></TabsTrigger>
               <TabsTrigger value="toggles" data-testid="tab-toggles" className="text-xs sm:text-sm"><Settings className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Toggles</span></TabsTrigger>
               <TabsTrigger value="spins" data-testid="tab-spins" className="text-xs sm:text-sm"><Eye className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Spins</span></TabsTrigger>
+              <TabsTrigger value="verifications" data-testid="tab-verifications" className="text-xs sm:text-sm">
+                <UserCheck className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Verify</span>
+                {pendingVerifications.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingVerifications.length}</Badge>}
+              </TabsTrigger>
             </TabsList>
           </div>
 
@@ -1020,6 +1058,73 @@ export default function Admin() {
                         <div className="flex items-center gap-2 shrink-0 ml-6 sm:ml-0">
                           {log.result === "WIN" && <Badge className="text-xs">{log.prizeLabel}</Badge>}
                           <span className="text-xs text-muted-foreground">{new Date(log.timestamp).toLocaleTimeString()}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="verifications" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
+                <div>
+                  <CardTitle className="text-lg sm:text-xl">Verification Requests</CardTitle>
+                  <CardDescription>Review and approve user Stake account verifications</CardDescription>
+                </div>
+                <Button onClick={() => refetchVerifications()} size="sm" variant="outline" data-testid="button-refresh-verifications">
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent>
+                {verificationsData?.verifications?.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">No verification requests</div>
+                ) : (
+                  <div className="space-y-3">
+                    {verificationsData?.verifications?.map((v) => (
+                      <div key={v.id} className={`p-4 rounded-md border ${v.status === "pending" ? "bg-yellow-500/5 border-yellow-500/20" : v.status === "approved" ? "bg-green-500/5 border-green-500/20" : "bg-destructive/5 border-destructive/20"}`}>
+                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium">{v.stakeUsername}</span>
+                              <Badge variant="outline" className="text-xs">{v.stakePlatform.toUpperCase()}</Badge>
+                              <Badge variant={v.status === "pending" ? "secondary" : v.status === "approved" ? "default" : "destructive"} className="text-xs">
+                                {v.status}
+                              </Badge>
+                            </div>
+                            <div className="text-sm text-muted-foreground">
+                              Bet ID: <span className="font-mono">{v.betId}</span>
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              User: {v.userEmail || v.userFirstName || "Unknown"} | Submitted: {new Date(v.createdAt).toLocaleString()}
+                            </div>
+                          </div>
+                          {v.status === "pending" && (
+                            <div className="flex gap-2 shrink-0">
+                              <Button
+                                size="sm"
+                                onClick={() => processVerification.mutate({ id: v.id, status: "approved" })}
+                                disabled={processVerification.isPending}
+                                data-testid={`button-approve-verification-${v.id}`}
+                              >
+                                <Check className="w-4 h-4 mr-1" />
+                                Approve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => processVerification.mutate({ id: v.id, status: "rejected" })}
+                                disabled={processVerification.isPending}
+                                data-testid={`button-reject-verification-${v.id}`}
+                              >
+                                <Ban className="w-4 h-4 mr-1" />
+                                Reject
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       </div>
                     ))}

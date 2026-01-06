@@ -1,6 +1,16 @@
-import { Wallet, Ticket, ExternalLink } from "lucide-react";
+import { Wallet, Ticket, ExternalLink, User, LogOut, Shield, LogIn } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/use-auth";
+import { Link } from "wouter";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 interface HeaderProps {
   walletBalance?: number;
@@ -9,57 +19,94 @@ interface HeaderProps {
 }
 
 export default function Header({ walletBalance, ticketsRemaining, stakeId }: HeaderProps) {
+  const { user, isLoading, isAuthenticated, logout } = useAuth();
   const hasData = stakeId !== undefined;
+
+  const getInitials = () => {
+    if (user?.firstName && user?.lastName) {
+      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    }
+    if (user?.email) {
+      return user.email[0].toUpperCase();
+    }
+    return "U";
+  };
 
   return (
     <header className="sticky top-0 z-50 w-full border-b bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between gap-4">
-        <Button
-          variant="ghost"
-          size="sm"
-          asChild
-          data-testid="button-main-site"
-        >
-          <a href="http://lukerewards.com" target="_blank" rel="noopener noreferrer">
-            <ExternalLink className="w-4 h-4 mr-1.5" />
-            Main Site
-          </a>
-        </Button>
+        <Link href="/">
+          <Button variant="ghost" size="sm" data-testid="button-home">
+            <Ticket className="w-4 h-4 mr-1.5" />
+            Spin Rewards
+          </Button>
+        </Link>
 
-        <div className="flex items-center gap-4">
-          {!hasData && (
-            <div className="flex items-center gap-2">
-              <Ticket className="w-5 h-5 text-primary" />
-              <span className="font-semibold text-lg">Spin Rewards</span>
-            </div>
+        <div className="flex items-center gap-3">
+          {hasData && (
+            <>
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10">
+                <Ticket className="w-4 h-4 text-primary" />
+                <span className="text-sm font-mono font-medium text-primary" data-testid="header-tickets">
+                  {ticketsRemaining ?? 0}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-500/10">
+                <Wallet className="w-4 h-4 text-yellow-500" />
+                <span className="text-sm font-mono font-medium text-yellow-500" data-testid="header-balance">
+                  ${(walletBalance ?? 0).toLocaleString()}
+                </span>
+              </div>
+
+              {stakeId && (
+                <Badge variant="outline" className="hidden sm:flex" data-testid="header-stake-id">
+                  {stakeId}
+                </Badge>
+              )}
+            </>
           )}
 
-        {hasData && (
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-primary/10">
-              <Ticket className="w-4 h-4 text-primary" />
-              <span className="text-sm font-mono font-medium text-primary" data-testid="header-tickets">
-                {ticketsRemaining ?? 0}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-yellow-500/10">
-              <Wallet className="w-4 h-4 text-yellow-500" />
-              <span className="text-sm font-mono font-medium text-yellow-500" data-testid="header-balance">
-                ${(walletBalance ?? 0).toLocaleString()}
-              </span>
-            </div>
-
-            {stakeId && (
-              <Badge variant="outline" className="hidden sm:flex" data-testid="header-stake-id">
-                {stakeId}
-              </Badge>
-            )}
-          </div>
-        )}
+          {isLoading ? (
+            <div className="w-8 h-8 rounded-full bg-muted animate-pulse" />
+          ) : isAuthenticated && user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
+                  <Avatar className="w-8 h-8">
+                    <AvatarImage src={user.profileImageUrl || undefined} alt={user.firstName || "User"} />
+                    <AvatarFallback className="text-xs">{getInitials()}</AvatarFallback>
+                  </Avatar>
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="w-56">
+                <div className="px-2 py-1.5">
+                  <p className="text-sm font-medium">{user.firstName} {user.lastName}</p>
+                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                </div>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem asChild>
+                  <Link href="/verify" className="cursor-pointer">
+                    <Shield className="w-4 h-4 mr-2" />
+                    Verify Account
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => logout()} className="text-destructive" data-testid="button-logout">
+                  <LogOut className="w-4 h-4 mr-2" />
+                  Sign Out
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button size="sm" asChild data-testid="button-login">
+              <a href="/api/login">
+                <LogIn className="w-4 h-4 mr-1.5" />
+                Sign In
+              </a>
+            </Button>
+          )}
         </div>
-
-        <div className="w-[88px]" />
       </div>
     </header>
   );
