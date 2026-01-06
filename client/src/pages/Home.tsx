@@ -7,6 +7,8 @@ import CaseOpening, { CaseSpinResult, BonusStatus } from "@/components/CaseOpeni
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { safeJsonParse } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/use-auth";
+import { useLocation } from "wouter";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -14,6 +16,8 @@ export default function Home() {
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
   const { toast } = useToast();
+  const { user, isAuthenticated } = useAuth();
+  const [, navigate] = useLocation();
 
   const updateBonusStatusFromTicketData = (data: { can_daily_bonus: boolean; next_bonus_at?: string }) => {
     const nextBonusAt = data.next_bonus_at ? new Date(data.next_bonus_at) : null;
@@ -44,6 +48,26 @@ export default function Home() {
   };
 
   const handleLookup = async (stakeId: string) => {
+    // Check if user is logged in
+    if (!isAuthenticated) {
+      toast({
+        title: "Login Required",
+        description: "Please login first to check your tickets.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    // Check if verification is completed
+    if (user?.verificationStatus !== "verified") {
+      toast({
+        title: "Verification Required",
+        description: "Your account verification is not completed. Please complete verification first.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
 
