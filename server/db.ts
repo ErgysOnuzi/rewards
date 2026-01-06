@@ -9,7 +9,7 @@ const isExternalDb = connectionString?.includes('neon.tech') ||
                      connectionString?.includes('supabase') ||
                      connectionString?.includes('sslmode=require');
 
-const pool = new pg.Pool({
+export const pool = new pg.Pool({
   connectionString,
   ssl: isExternalDb ? { rejectUnauthorized: false } : false,
 });

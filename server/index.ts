@@ -3,9 +3,12 @@ import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
 import cookieParser from "cookie-parser";
+import session from "express-session";
+import connectPgSimple from "connect-pg-simple";
 import { startBackgroundRefresh } from "./lib/sheets";
 import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/security";
 import { enforceSecurityRequirements } from "./lib/config";
+import { pool } from "./db";
 
 // Validate security requirements at startup - fail hard if missing
 enforceSecurityRequirements();
@@ -24,6 +27,27 @@ app.use(requestIdMiddleware);
 app.use(securityHeaders);
 
 app.use(cookieParser());
+
+// Session middleware for custom authentication
+const PgSession = connectPgSimple(session);
+app.use(
+  session({
+    store: new PgSession({
+      pool,
+      tableName: "sessions",
+      createTableIfMissing: true,
+    }),
+    secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
+    resave: false,
+    saveUninitialized: false,
+    cookie: {
+      secure: process.env.NODE_ENV === "production",
+      httpOnly: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      sameSite: "lax",
+    },
+  })
+);
 
 // CSRF protection for state-changing requests
 app.use(csrfProtection);
