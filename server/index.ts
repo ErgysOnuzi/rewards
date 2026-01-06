@@ -6,7 +6,6 @@ import cookieParser from "cookie-parser";
 import { startBackgroundRefresh } from "./lib/sheets";
 import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/security";
 import { enforceSecurityRequirements } from "./lib/config";
-import { setupAuth, registerAuthRoutes } from "./replit_integrations/auth";
 
 // Validate security requirements at startup - fail hard if missing
 enforceSecurityRequirements();
@@ -83,10 +82,6 @@ app.use((req, res, next) => {
 
 (async () => {
   startBackgroundRefresh();
-  
-  // Setup Replit Auth (must be before other routes)
-  await setupAuth(app);
-  registerAuthRoutes(app);
   
   await registerRoutes(httpServer, app);
 
