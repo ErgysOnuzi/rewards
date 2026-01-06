@@ -134,13 +134,32 @@ interface VerificationRequest {
   userId: string;
   stakeUsername: string;
   stakePlatform: string;
-  betId: string;
+  screenshotUrl: string;
+  screenshotFilename: string | null;
   status: string;
   adminNotes: string | null;
   createdAt: string;
   processedAt: string | null;
   userEmail: string | null;
-  userFirstName: string | null;
+  username: string | null;
+}
+
+interface VerificationUser {
+  id: string;
+  username: string;
+  email: string | null;
+  stakeUsername: string | null;
+  stakePlatform: string | null;
+  verificationStatus: string | null;
+  verifiedAt: string | null;
+  createdAt: string;
+}
+
+interface VerificationQueuesData {
+  unverified: VerificationUser[];
+  pending: VerificationUser[];
+  verified: VerificationUser[];
+  pendingRequests: (VerificationRequest & { username: string | null })[];
 }
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
@@ -270,7 +289,12 @@ export default function Admin() {
     enabled: isAuthenticated === true,
   });
 
-  const pendingVerifications = verificationsData?.verifications?.filter(v => v.status === "pending") || [];
+  const { data: verificationQueuesData, refetch: refetchVerificationQueues } = useQuery<VerificationQueuesData>({
+    queryKey: ["/api/admin/users/verification-status"],
+    enabled: isAuthenticated === true,
+  });
+
+  const pendingVerifications = verificationQueuesData?.pendingRequests || [];
 
   const processVerification = useMutation({
     mutationFn: async ({ id, status, admin_notes }: { id: number; status: "approved" | "rejected"; admin_notes?: string }) => {
@@ -1068,42 +1092,43 @@ export default function Admin() {
           </TabsContent>
 
           <TabsContent value="verifications" className="space-y-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap mb-4">
+              <h2 className="text-xl font-semibold">User Verification Management</h2>
+              <Button onClick={() => { refetchVerifications(); refetchVerificationQueues(); }} size="sm" variant="outline" data-testid="button-refresh-verifications">
+                <RefreshCw className="w-4 h-4 mr-2" />
+                Refresh
+              </Button>
+            </div>
+
             <Card>
-              <CardHeader className="flex flex-row items-center justify-between gap-4 flex-wrap">
-                <div>
-                  <CardTitle className="text-lg sm:text-xl">Verification Requests</CardTitle>
-                  <CardDescription>Review and approve user Stake account verifications</CardDescription>
-                </div>
-                <Button onClick={() => refetchVerifications()} size="sm" variant="outline" data-testid="button-refresh-verifications">
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Refresh
-                </Button>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <AlertTriangle className="w-5 h-5 text-yellow-500" />
+                  Pending Review ({pendingVerifications.length})
+                </CardTitle>
+                <CardDescription>Screenshots awaiting admin verification</CardDescription>
               </CardHeader>
               <CardContent>
-                {verificationsData?.verifications?.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">No verification requests</div>
+                {pendingVerifications.length === 0 ? (
+                  <div className="text-center text-muted-foreground py-8">No pending verification requests</div>
                 ) : (
-                  <div className="space-y-3">
-                    {verificationsData?.verifications?.map((v) => (
-                      <div key={v.id} className={`p-4 rounded-md border ${v.status === "pending" ? "bg-yellow-500/5 border-yellow-500/20" : v.status === "approved" ? "bg-green-500/5 border-green-500/20" : "bg-destructive/5 border-destructive/20"}`}>
-                        <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-                          <div className="space-y-1">
+                  <div className="space-y-4">
+                    {pendingVerifications.map((v) => (
+                      <div key={v.id} className="p-4 rounded-md border bg-yellow-500/5 border-yellow-500/20">
+                        <div className="flex flex-col lg:flex-row gap-4">
+                          <div className="flex-1 space-y-2">
                             <div className="flex items-center gap-2 flex-wrap">
                               <span className="font-medium">{v.stakeUsername}</span>
                               <Badge variant="outline" className="text-xs">{v.stakePlatform.toUpperCase()}</Badge>
-                              <Badge variant={v.status === "pending" ? "secondary" : v.status === "approved" ? "default" : "destructive"} className="text-xs">
-                                {v.status}
-                              </Badge>
+                              <Badge variant="secondary" className="text-xs">Pending</Badge>
                             </div>
                             <div className="text-sm text-muted-foreground">
-                              Bet ID: <span className="font-mono">{v.betId}</span>
+                              Account: @{v.username || "Unknown"}
                             </div>
                             <div className="text-xs text-muted-foreground">
-                              User: {v.userEmail || v.userFirstName || "Unknown"} | Submitted: {new Date(v.createdAt).toLocaleString()}
+                              Submitted: {new Date(v.createdAt).toLocaleString()}
                             </div>
-                          </div>
-                          {v.status === "pending" && (
-                            <div className="flex gap-2 shrink-0">
+                            <div className="flex gap-2 mt-3">
                               <Button
                                 size="sm"
                                 onClick={() => processVerification.mutate({ id: v.id, status: "approved" })}
@@ -1124,7 +1149,19 @@ export default function Admin() {
                                 Reject
                               </Button>
                             </div>
-                          )}
+                          </div>
+                          <div className="lg:w-64 shrink-0">
+                            <a href={v.screenshotUrl} target="_blank" rel="noopener noreferrer" className="block">
+                              <img 
+                                src={v.screenshotUrl} 
+                                alt="Verification screenshot" 
+                                className="w-full h-40 object-cover rounded-md border cursor-pointer hover:opacity-80 transition-opacity"
+                              />
+                            </a>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">
+                              {v.screenshotFilename || "Screenshot"}
+                            </p>
+                          </div>
                         </div>
                       </div>
                     ))}
@@ -1132,6 +1169,74 @@ export default function Admin() {
                 )}
               </CardContent>
             </Card>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5 text-muted-foreground" />
+                    Unverified ({verificationQueuesData?.unverified?.length || 0})
+                  </CardTitle>
+                  <CardDescription>Users who have not submitted verification</CardDescription>
+                </CardHeader>
+                <CardContent className="max-h-64 overflow-y-auto">
+                  {!verificationQueuesData?.unverified?.length ? (
+                    <div className="text-center text-muted-foreground py-4">No unverified users</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {verificationQueuesData.unverified.slice(0, 20).map((u) => (
+                        <div key={u.id} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
+                          <div>
+                            <span className="font-medium text-sm">@{u.username}</span>
+                            {u.email && <span className="text-xs text-muted-foreground ml-2">{u.email}</span>}
+                          </div>
+                          <Badge variant="outline" className="text-xs">Unverified</Badge>
+                        </div>
+                      ))}
+                      {verificationQueuesData.unverified.length > 20 && (
+                        <div className="text-xs text-muted-foreground text-center">
+                          +{verificationQueuesData.unverified.length - 20} more
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              <Card>
+                <CardHeader>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <UserCheck className="w-5 h-5 text-green-500" />
+                    Verified ({verificationQueuesData?.verified?.length || 0})
+                  </CardTitle>
+                  <CardDescription>Users with approved accounts</CardDescription>
+                </CardHeader>
+                <CardContent className="max-h-64 overflow-y-auto">
+                  {!verificationQueuesData?.verified?.length ? (
+                    <div className="text-center text-muted-foreground py-4">No verified users</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {verificationQueuesData.verified.slice(0, 20).map((u) => (
+                        <div key={u.id} className="flex items-center justify-between p-2 rounded-md bg-green-500/5">
+                          <div>
+                            <span className="font-medium text-sm">@{u.username}</span>
+                            <span className="text-xs text-muted-foreground ml-2">
+                              {u.stakeUsername} ({u.stakePlatform?.toUpperCase()})
+                            </span>
+                          </div>
+                          <Badge variant="default" className="text-xs bg-green-600">Verified</Badge>
+                        </div>
+                      ))}
+                      {verificationQueuesData.verified.length > 20 && (
+                        <div className="text-xs text-muted-foreground text-center">
+                          +{verificationQueuesData.verified.length - 20} more
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </div>
           </TabsContent>
         </Tabs>
       </div>

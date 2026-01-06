@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { AlertTriangle, CheckCircle2, Clock, Shield, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Clock, Shield, Upload, Image, X, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -35,14 +35,17 @@ export default function Verify() {
   
   const [stakeUsername, setStakeUsername] = useState("");
   const [stakePlatform, setStakePlatform] = useState<string>("");
-  const [betId, setBetId] = useState("");
+  const [screenshot, setScreenshot] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!authLoading && !isAuthenticated) {
-      window.location.href = "/api/login";
+      setLocation("/login");
     }
-  }, [authLoading, isAuthenticated]);
+  }, [authLoading, isAuthenticated, setLocation]);
 
   useEffect(() => {
     if (isAuthenticated) {
@@ -84,13 +87,57 @@ export default function Verify() {
     }
   };
 
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (!file.type.startsWith("image/")) {
+        toast({
+          title: "Invalid File",
+          description: "Please upload an image file (JPEG, PNG, GIF, or WebP)",
+          variant: "destructive",
+        });
+        return;
+      }
+      if (file.size > 10 * 1024 * 1024) {
+        toast({
+          title: "File Too Large",
+          description: "Maximum file size is 10MB",
+          variant: "destructive",
+        });
+        return;
+      }
+      setScreenshot(file);
+      setPreviewUrl(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRemoveScreenshot = () => {
+    setScreenshot(null);
+    if (previewUrl) {
+      URL.revokeObjectURL(previewUrl);
+      setPreviewUrl(null);
+    }
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
   const handleSubmitVerification = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!stakeUsername.trim() || !stakePlatform || !betId.trim()) {
+    if (!stakeUsername.trim() || !stakePlatform) {
       toast({
         title: "Missing Information",
-        description: "Please fill in all fields",
+        description: "Please enter your Stake username and select a platform",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!screenshot) {
+      toast({
+        title: "Screenshot Required",
+        description: "Please upload a screenshot of your bet history",
         variant: "destructive",
       });
       return;
@@ -98,15 +145,15 @@ export default function Verify() {
 
     setIsSubmitting(true);
     try {
+      const formData = new FormData();
+      formData.append("stake_username", stakeUsername);
+      formData.append("stake_platform", stakePlatform);
+      formData.append("screenshot", screenshot);
+
       const response = await fetch("/api/verification/submit", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({
-          stake_username: stakeUsername,
-          stake_platform: stakePlatform,
-          bet_id: betId,
-        }),
+        body: formData,
       });
 
       const data = await response.json();
@@ -117,9 +164,10 @@ export default function Verify() {
 
       toast({
         title: "Verification Submitted",
-        description: "Your request has been submitted for admin review.",
+        description: "Your screenshot has been submitted for admin review.",
       });
 
+      handleRemoveScreenshot();
       fetchVerificationStatus();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Submission failed";
@@ -136,7 +184,7 @@ export default function Verify() {
   if (authLoading || isLoadingStatus) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-muted-foreground">Loading...</div>
+        <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
       </div>
     );
   }
@@ -213,7 +261,7 @@ export default function Verify() {
                   <div>
                     <h3 className="text-xl font-semibold">Verification Pending</h3>
                     <p className="text-muted-foreground">
-                      Your verification request is being reviewed by an admin. This usually takes a few hours.
+                      Your screenshot is being reviewed by an admin. This usually takes a few hours.
                     </p>
                   </div>
                 </div>
@@ -224,21 +272,21 @@ export default function Verify() {
               <CardHeader>
                 <CardTitle>Link Your Stake Account</CardTitle>
                 <CardDescription>
-                  To verify your account, place a small bet on Stake and submit the bet ID below.
+                  Upload a screenshot of your bet history to verify your Stake account ownership.
                 </CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-6">
-                  <div className="bg-muted/50 p-4 rounded-lg space-y-3">
+                  <div className="bg-muted/50 p-4 rounded-md space-y-3">
                     <h4 className="font-medium flex items-center gap-2">
-                      <ExternalLink className="w-4 h-4" />
+                      <Image className="w-4 h-4" />
                       Verification Steps
                     </h4>
                     <ol className="text-sm text-muted-foreground space-y-2 list-decimal list-inside">
                       <li>Log into your Stake account</li>
-                      <li>Place any small bet (e.g., $0.01 on Dice)</li>
-                      <li>Copy the Bet ID from your bet history</li>
-                      <li>Submit the form below with your details</li>
+                      <li>Go to your bet history or account settings</li>
+                      <li>Take a screenshot showing your username clearly</li>
+                      <li>Upload the screenshot below</li>
                     </ol>
                   </div>
 
@@ -250,13 +298,14 @@ export default function Verify() {
                         placeholder="Your Stake username"
                         value={stakeUsername}
                         onChange={(e) => setStakeUsername(e.target.value)}
+                        disabled={isSubmitting}
                         data-testid="input-stake-username"
                       />
                     </div>
 
                     <div className="space-y-2">
                       <Label htmlFor="stake-platform">Platform</Label>
-                      <Select value={stakePlatform} onValueChange={setStakePlatform}>
+                      <Select value={stakePlatform} onValueChange={setStakePlatform} disabled={isSubmitting}>
                         <SelectTrigger data-testid="select-stake-platform">
                           <SelectValue placeholder="Select platform" />
                         </SelectTrigger>
@@ -268,17 +317,52 @@ export default function Verify() {
                     </div>
 
                     <div className="space-y-2">
-                      <Label htmlFor="bet-id">Bet ID</Label>
-                      <Input
-                        id="bet-id"
-                        placeholder="e.g., abc123def456"
-                        value={betId}
-                        onChange={(e) => setBetId(e.target.value)}
-                        data-testid="input-bet-id"
+                      <Label>Screenshot of Bet History</Label>
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept="image/*"
+                        onChange={handleFileChange}
+                        className="hidden"
+                        data-testid="input-screenshot"
                       />
-                      <p className="text-xs text-muted-foreground">
-                        Find this in your Stake bet history after placing any bet
-                      </p>
+                      
+                      {!screenshot ? (
+                        <div 
+                          onClick={() => fileInputRef.current?.click()}
+                          className="border-2 border-dashed border-muted-foreground/25 rounded-md p-8 text-center cursor-pointer hover-elevate transition-colors"
+                          data-testid="dropzone-screenshot"
+                        >
+                          <Upload className="w-10 h-10 mx-auto text-muted-foreground/50 mb-3" />
+                          <p className="text-sm text-muted-foreground">
+                            Click to upload a screenshot
+                          </p>
+                          <p className="text-xs text-muted-foreground/70 mt-1">
+                            JPEG, PNG, GIF or WebP (max 10MB)
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="relative border rounded-md overflow-hidden">
+                          <img 
+                            src={previewUrl || ""} 
+                            alt="Screenshot preview" 
+                            className="w-full max-h-64 object-contain bg-muted"
+                          />
+                          <Button
+                            type="button"
+                            size="icon"
+                            variant="destructive"
+                            className="absolute top-2 right-2"
+                            onClick={handleRemoveScreenshot}
+                            data-testid="button-remove-screenshot"
+                          >
+                            <X className="w-4 h-4" />
+                          </Button>
+                          <div className="p-2 bg-muted/50 text-xs text-muted-foreground truncate">
+                            {screenshot.name}
+                          </div>
+                        </div>
+                      )}
                     </div>
 
                     <Button 
@@ -287,7 +371,17 @@ export default function Verify() {
                       disabled={isSubmitting}
                       data-testid="button-submit-verification"
                     >
-                      {isSubmitting ? "Submitting..." : "Submit for Verification"}
+                      {isSubmitting ? (
+                        <>
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                          Uploading...
+                        </>
+                      ) : (
+                        <>
+                          <Upload className="mr-2 h-4 w-4" />
+                          Submit for Verification
+                        </>
+                      )}
                     </Button>
                   </form>
                 </div>

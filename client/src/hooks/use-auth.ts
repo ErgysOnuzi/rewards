@@ -1,39 +1,72 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
+import { apiRequest } from "@/lib/queryClient";
 
-async function fetchUser(): Promise<User | null> {
-  const response = await fetch("/api/auth/user", {
+interface AuthResponse {
+  success: boolean;
+  user: User;
+}
+
+async function fetchSession(): Promise<User | null> {
+  const response = await fetch("/api/auth/session", {
     credentials: "include",
   });
 
-  if (response.status === 401) {
+  if (!response.ok) {
     return null;
   }
 
-  if (!response.ok) {
-    throw new Error(`${response.status}: ${response.statusText}`);
-  }
-
-  return response.json();
+  const data = await response.json();
+  return data.user || null;
 }
 
-async function logout(): Promise<void> {
-  window.location.href = "/api/logout";
+interface LoginParams {
+  username: string;
+  password: string;
+}
+
+interface RegisterParams {
+  username: string;
+  password: string;
+  email?: string;
 }
 
 export function useAuth() {
   const queryClient = useQueryClient();
+  
   const { data: user, isLoading } = useQuery<User | null>({
-    queryKey: ["/api/auth/user"],
-    queryFn: fetchUser,
+    queryKey: ["/api/auth/session"],
+    queryFn: fetchSession,
     retry: false,
     staleTime: 1000 * 60 * 5, // 5 minutes
   });
 
+  const loginMutation = useMutation({
+    mutationFn: async (params: LoginParams): Promise<AuthResponse> => {
+      const res = await apiRequest("POST", "/api/auth/login", params);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/auth/session"], data.user);
+    },
+  });
+
+  const registerMutation = useMutation({
+    mutationFn: async (params: RegisterParams): Promise<AuthResponse> => {
+      const res = await apiRequest("POST", "/api/auth/register", params);
+      return res.json();
+    },
+    onSuccess: (data) => {
+      queryClient.setQueryData(["/api/auth/session"], data.user);
+    },
+  });
+
   const logoutMutation = useMutation({
-    mutationFn: logout,
+    mutationFn: async () => {
+      await apiRequest("POST", "/api/auth/logout", {});
+    },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/user"], null);
+      queryClient.setQueryData(["/api/auth/session"], null);
     },
   });
 
@@ -41,7 +74,16 @@ export function useAuth() {
     user,
     isLoading,
     isAuthenticated: !!user,
+    login: loginMutation.mutate,
+    loginAsync: loginMutation.mutateAsync,
+    isLoggingIn: loginMutation.isPending,
+    loginError: loginMutation.error,
+    register: registerMutation.mutate,
+    registerAsync: registerMutation.mutateAsync,
+    isRegistering: registerMutation.isPending,
+    registerError: registerMutation.error,
     logout: logoutMutation.mutate,
     isLoggingOut: logoutMutation.isPending,
+    refetchUser: () => queryClient.invalidateQueries({ queryKey: ["/api/auth/session"] }),
   };
 }
