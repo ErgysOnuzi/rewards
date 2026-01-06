@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
 import { Loader2, UserPlus } from "lucide-react";
 import { Link } from "wouter";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Register() {
   const [, setLocation] = useLocation();
@@ -18,6 +19,7 @@ export default function Register() {
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [email, setEmail] = useState("");
+  const [stakePlatform, setStakePlatform] = useState<"us" | "com" | "">("");
 
   // Redirect if already logged in
   if (isAuthenticated) {
@@ -28,11 +30,11 @@ export default function Register() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!username || !password) {
+    if (!username || !password || !email || !stakePlatform) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Please enter username and password",
+        description: "Please fill in all required fields",
       });
       return;
     }
@@ -65,12 +67,12 @@ export default function Register() {
     }
 
     try {
-      await registerAsync({ username, password, email: email || undefined });
+      await registerAsync({ username, password, email, stakePlatform });
       toast({
         title: "Account Created!",
-        description: "Welcome! Your account has been created successfully.",
+        description: "Welcome! Please complete verification to start spinning.",
       });
-      setLocation("/");
+      setLocation("/verify");
     } catch (error: any) {
       const message = error?.message || "Registration failed. Please try again.";
       toast({
@@ -86,27 +88,43 @@ export default function Register() {
       <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Create Account</CardTitle>
-          <CardDescription>Sign up to start earning spin rewards</CardDescription>
+          <CardDescription>Use your Stake username to sign up</CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
+              <Label htmlFor="stakePlatform">Stake Platform *</Label>
+              <Select
+                value={stakePlatform}
+                onValueChange={(value: "us" | "com") => setStakePlatform(value)}
+                disabled={isRegistering}
+              >
+                <SelectTrigger data-testid="select-platform">
+                  <SelectValue placeholder="Select your platform" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="us">Stake.us</SelectItem>
+                  <SelectItem value="com">Stake.com</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="username">Stake Username *</Label>
               <Input
                 id="username"
                 type="text"
-                placeholder="Choose a username"
+                placeholder="Your Stake username"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 disabled={isRegistering}
                 data-testid="input-username"
               />
               <p className="text-xs text-muted-foreground">
-                3-30 characters, letters, numbers, and underscores only
+                Must match your Stake account username exactly
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">Email (optional)</Label>
+              <Label htmlFor="email">Email *</Label>
               <Input
                 id="email"
                 type="email"
@@ -118,7 +136,7 @@ export default function Register() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">Password</Label>
+              <Label htmlFor="password">Password *</Label>
               <Input
                 id="password"
                 type="password"
@@ -133,7 +151,7 @@ export default function Register() {
               </p>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="confirmPassword">Confirm Password</Label>
+              <Label htmlFor="confirmPassword">Confirm Password *</Label>
               <Input
                 id="confirmPassword"
                 type="password"

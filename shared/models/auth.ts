@@ -57,12 +57,13 @@ export const insertVerificationRequestSchema = createInsertSchema(verificationRe
   adminNotes: true,
 });
 
-// Registration schema
+// Registration schema - username must match a Stake username from the spreadsheet
 export const registerSchema = z.object({
   username: z.string().min(3, "Username must be at least 3 characters").max(30, "Username must be at most 30 characters")
     .regex(/^[a-zA-Z0-9_]+$/, "Username can only contain letters, numbers, and underscores"),
   password: z.string().min(8, "Password must be at least 8 characters"),
-  email: z.string().email().optional(),
+  email: z.string().email("Please enter a valid email address"),
+  stakePlatform: z.enum(["us", "com"], { required_error: "Please select your Stake platform" }),
 });
 
 // Login schema

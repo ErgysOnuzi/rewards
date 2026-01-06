@@ -157,26 +157,38 @@ export async function registerRoutes(
   
   // =================== CUSTOM AUTHENTICATION ===================
   
-  // Register new user
+  // Register new user - username must exist in the appropriate spreadsheet
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
       const parsed = registerSchema.parse(req.body);
-      const { username, password, email } = parsed;
+      const { username, password, email, stakePlatform } = parsed;
       
-      // Check if username already exists
+      // Validate username exists in the appropriate spreadsheet
+      const { usernameExistsInSpreadsheet } = await import("./lib/sheets");
+      const existsInSheet = usernameExistsInSpreadsheet(username, stakePlatform);
+      if (!existsInSheet) {
+        return res.status(400).json({ 
+          message: `Username "${username}" not found in ${stakePlatform === "us" ? "Stake.us" : "Stake.com"} records. Please use your Stake username.` 
+        });
+      }
+      
+      // Check if username already exists in our database
       const [existing] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
       if (existing) {
-        return res.status(400).json({ message: "Username already taken" });
+        return res.status(400).json({ message: "Username already registered" });
       }
       
       // Hash password
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
       
-      // Create user
+      // Create user with stake info pre-filled (still needs verification)
       const [newUser] = await db.insert(users).values({
         username: username.toLowerCase(),
         passwordHash,
-        email: email || null,
+        email,
+        stakeUsername: username.toLowerCase(),
+        stakePlatform,
+        verificationStatus: "unverified",
       }).returning();
       
       // Set session
@@ -195,6 +207,7 @@ export async function registerRoutes(
           id: newUser.id,
           username: newUser.username,
           verificationStatus: newUser.verificationStatus,
+          stakePlatform: newUser.stakePlatform,
         },
       });
     } catch (err) {
@@ -566,6 +579,19 @@ export async function registerRoutes(
 
       const parsed = spinRequestSchema.parse(req.body);
       const stakeId = parsed.stake_id.toLowerCase();
+
+      // Check if user is verified before allowing spins
+      const [verifiedUser] = await db.select().from(users)
+        .where(and(
+          eq(users.stakeUsername, stakeId),
+          eq(users.verificationStatus, "verified")
+        ));
+      
+      if (!verifiedUser) {
+        return res.status(403).json({ 
+          message: "Account must be verified before spinning. Please complete verification first." 
+        } as ErrorResponse);
+      }
 
       // Check stake ID rate limit
       if (isStakeIdRateLimited(stakeId)) {

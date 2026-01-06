@@ -226,6 +226,23 @@ export function getWeightedCacheStatus(): {
   };
 }
 
+// Get all weighted users for admin panel
+export function getAllWeightedUsers(domain: "us" | "com"): Array<{ stakeId: string; wagered: number }> {
+  const cache = domain === "us" ? weightedDataCacheUs : weightedDataCacheCom;
+  if (!cache) return [];
+  return Array.from(cache.entries()).map(([stakeId, wagered]) => ({
+    stakeId,
+    wagered,
+  })).sort((a, b) => b.wagered - a.wagered);
+}
+
+// Check if a username exists in the weighted sheets
+export function usernameExistsInSpreadsheet(username: string, domain: "us" | "com"): boolean {
+  const normalizedUsername = username.toLowerCase().trim();
+  const cache = domain === "us" ? weightedDataCacheUs : weightedDataCacheCom;
+  return cache?.has(normalizedUsername) || false;
+}
+
 // Find column index by header name (case-insensitive)
 function findColumnIndex(headers: string[], columnName: string): number {
   const normalized = columnName.toLowerCase();
