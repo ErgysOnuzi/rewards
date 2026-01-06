@@ -202,11 +202,35 @@ async function loadAllWeightedData(): Promise<void> {
   console.log(`[Weighted] Total loaded: US=${usCache.size}, COM=${comCache.size}`);
 }
 
-// Get weighted wager for a user based on their domain
-export function getWeightedWager(stakeId: string, domain: "us" | "com" = "com"): number {
+// Get weighted wager for a user - checks BOTH sheets and returns the one with data
+// If user has data in both, returns the higher value
+export function getWeightedWager(stakeId: string, _domain?: "us" | "com"): number {
   const normalizedId = stakeId.toLowerCase().trim();
-  const cache = domain === "us" ? weightedDataCacheUs : weightedDataCacheCom;
-  return cache?.get(normalizedId) || 0;
+  const usWager = weightedDataCacheUs?.get(normalizedId) || 0;
+  const comWager = weightedDataCacheCom?.get(normalizedId) || 0;
+  
+  // Return whichever has data (or the higher value if both have data)
+  return Math.max(usWager, comWager);
+}
+
+// Get weighted wager with domain info - for cases where we need to know which sheet matched
+export function getWeightedWagerWithDomain(stakeId: string): { wager: number; domain: "us" | "com" | null } {
+  const normalizedId = stakeId.toLowerCase().trim();
+  const usWager = weightedDataCacheUs?.get(normalizedId) || 0;
+  const comWager = weightedDataCacheCom?.get(normalizedId) || 0;
+  
+  if (usWager > 0 && comWager > 0) {
+    // User in both sheets - return higher value with that domain
+    return usWager >= comWager 
+      ? { wager: usWager, domain: "us" }
+      : { wager: comWager, domain: "com" };
+  } else if (usWager > 0) {
+    return { wager: usWager, domain: "us" };
+  } else if (comWager > 0) {
+    return { wager: comWager, domain: "com" };
+  }
+  
+  return { wager: 0, domain: null };
 }
 
 // Get weighted wager status for admin
@@ -236,11 +260,12 @@ export function getAllWeightedUsers(domain: "us" | "com"): Array<{ stakeId: stri
   })).sort((a, b) => b.wagered - a.wagered);
 }
 
-// Check if a username exists in the weighted sheets
-export function usernameExistsInSpreadsheet(username: string, domain: "us" | "com"): boolean {
+// Check if a username exists in the weighted sheets (checks BOTH sheets)
+export function usernameExistsInSpreadsheet(username: string, _domain?: "us" | "com"): boolean {
   const normalizedUsername = username.toLowerCase().trim();
-  const cache = domain === "us" ? weightedDataCacheUs : weightedDataCacheCom;
-  return cache?.has(normalizedUsername) || false;
+  const inUs = weightedDataCacheUs?.has(normalizedUsername) || false;
+  const inCom = weightedDataCacheCom?.has(normalizedUsername) || false;
+  return inUs || inCom;
 }
 
 // Find column index by header name (case-insensitive)
