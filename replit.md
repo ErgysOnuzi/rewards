@@ -2,9 +2,33 @@
 
 ## Overview
 
-LukeRewards Spins is a ticket-based spin/raffle system where users earn tickets based on their wagered amount on Stake.com. The core mechanic is simple: every $1,000 wagered equals 1 ticket, and each spin costs 1 ticket. Users enter their Stake ID, the system looks up their wager data from Google Sheets, calculates available tickets, and allows them to spin for prizes. Results are WIN or LOSE with configurable odds that favor the house.
+LukeRewards Spins is a ticket-based spin/raffle system where users earn tickets based on their wagered amount on Stake.com. The core mechanic is simple: every $1,000 wagered equals 1 ticket, and each spin costs 1 ticket. Users register with username/password, verify their Stake account by uploading bet screenshots for admin review, and can then spin for prizes. Results are WIN or LOSE with configurable odds that favor the house.
 
 This is a standalone site separate from lukerewards.com, focused on a single-page gambling-inspired experience with a premium dark aesthetic inspired by Stake.com.
+
+## Authentication & Verification System
+
+### Custom User Authentication
+- **Registration**: Users create accounts with username/password (bcrypt 12 salt rounds)
+- **Login**: Session-based authentication stored in PostgreSQL sessions table
+- **Routes**: /login, /register, /verify pages with form validation
+
+### Screenshot-Based Verification
+Instead of automatic bet ID lookup, users upload screenshots showing their Stake username:
+1. User registers account → Status: "Unverified"
+2. User uploads screenshot on /verify page → Status: "Pending"
+3. Admin reviews screenshot in admin panel → Status: "Verified" or "Rejected"
+
+### Admin Verification Panel (3 Queues)
+- **Unverified**: Users who registered but never submitted verification
+- **Pending**: Users with screenshots awaiting admin review (with preview)
+- **Verified**: Users approved by admin
+
+### File Upload
+- Screenshots stored in `uploads/verification/` directory
+- Served via `/uploads` static route
+- Max file size: 10MB
+- Allowed types: JPEG, PNG, GIF, WebP
 
 ## User Preferences
 
