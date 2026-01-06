@@ -2,12 +2,15 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import pg from "pg";
 import * as schema from "@shared/schema";
 
-// Use NEON_DATABASE_URL if available, otherwise fall back to DATABASE_URL
-const connectionString = process.env.NEON_DATABASE_URL || process.env.DATABASE_URL;
+const connectionString = process.env.DATABASE_URL;
 
-const isExternalDb = connectionString?.includes('neon.tech') || 
-                     connectionString?.includes('supabase') ||
-                     connectionString?.includes('sslmode=require');
+if (!connectionString) {
+  throw new Error("DATABASE_URL environment variable is required");
+}
+
+const isExternalDb = connectionString.includes('neon.tech') || 
+                     connectionString.includes('supabase') ||
+                     connectionString.includes('sslmode=require');
 
 export const pool = new pg.Pool({
   connectionString,
