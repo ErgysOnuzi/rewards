@@ -570,6 +570,25 @@ export async function registerRoutes(
 
   app.post("/api/spin", async (req: Request, res: Response) => {
     try {
+      // Require login before spinning
+      const sessionUserId = (req.session as any)?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Please log in to spin." } as ErrorResponse);
+      }
+
+      // Get the logged-in user
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      if (!loggedInUser) {
+        return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
+      }
+
+      // Check if user is verified
+      if (loggedInUser.verificationStatus !== "verified") {
+        return res.status(403).json({ 
+          message: "Account must be verified before spinning. Please complete verification first." 
+        } as ErrorResponse);
+      }
+
       const clientIp = getClientIp(req);
       const ipHash = hashIp(clientIp);
 
@@ -577,20 +596,10 @@ export async function registerRoutes(
         return res.status(429).json({ message: "Too many spin attempts. Try again later." } as ErrorResponse);
       }
 
-      const parsed = spinRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
-
-      // Check if user is verified before allowing spins
-      const [verifiedUser] = await db.select().from(users)
-        .where(and(
-          eq(users.stakeUsername, stakeId),
-          eq(users.verificationStatus, "verified")
-        ));
-      
-      if (!verifiedUser) {
-        return res.status(403).json({ 
-          message: "Account must be verified before spinning. Please complete verification first." 
-        } as ErrorResponse);
+      // Use the stake username from the logged-in user's account
+      const stakeId = loggedInUser.stakeUsername?.toLowerCase();
+      if (!stakeId) {
+        return res.status(400).json({ message: "No Stake username linked to your account." } as ErrorResponse);
       }
 
       // Check stake ID rate limit
@@ -612,8 +621,8 @@ export async function registerRoutes(
         return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
       }
 
-      // Get domain from request (default to com)
-      const domain = parsed.domain || "com";
+      // Get domain from user's registered platform (default to com)
+      const domain = (loggedInUser.stakePlatform === "us" ? "us" : "com") as "us" | "com";
       
       // Calculate tickets from weighted 2026 sheets ONLY (no NGR fallback)
       const weightedWager = getWeightedWager(stakeId, domain);
