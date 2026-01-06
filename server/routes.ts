@@ -21,6 +21,7 @@ import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWage
 import { hashIp } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
+import { encrypt, decrypt } from "./lib/encryption";
 import { ZodError, z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, lt } from "drizzle-orm";
@@ -181,11 +182,14 @@ export async function registerRoutes(
       // Hash password
       const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
       
+      // Encrypt sensitive data before storage
+      const encryptedEmail = encrypt(email);
+      
       // Create user with stake info pre-filled (still needs verification)
       const [newUser] = await db.insert(users).values({
         username: username.toLowerCase(),
         passwordHash,
-        email,
+        email: encryptedEmail,
         stakeUsername: username.toLowerCase(),
         stakePlatform,
         verificationStatus: "unverified",
@@ -264,7 +268,7 @@ export async function registerRoutes(
         user: {
           id: user.id,
           username: user.username,
-          email: user.email,
+          email: decrypt(user.email || ""),
           stakeUsername: user.stakeUsername,
           stakePlatform: user.stakePlatform,
           verificationStatus: user.verificationStatus,
@@ -309,7 +313,7 @@ export async function registerRoutes(
         user: {
           id: user.id,
           username: user.username,
-          email: user.email,
+          email: decrypt(user.email || ""),
           stakeUsername: user.stakeUsername,
           stakePlatform: user.stakePlatform,
           verificationStatus: user.verificationStatus,
@@ -464,9 +468,15 @@ export async function registerRoutes(
         createdAt: users.createdAt,
       }).from(users).orderBy(desc(users.createdAt));
       
-      const unverified = allUsers.filter(u => u.verificationStatus === "unverified" || !u.verificationStatus);
-      const pending = allUsers.filter(u => u.verificationStatus === "pending");
-      const verified = allUsers.filter(u => u.verificationStatus === "verified");
+      // Decrypt emails for admin view
+      const decryptedUsers = allUsers.map(u => ({
+        ...u,
+        email: decrypt(u.email || ""),
+      }));
+      
+      const unverified = decryptedUsers.filter(u => u.verificationStatus === "unverified" || !u.verificationStatus);
+      const pending = decryptedUsers.filter(u => u.verificationStatus === "pending");
+      const verified = decryptedUsers.filter(u => u.verificationStatus === "verified");
       
       // Get pending verification requests with screenshots
       const pendingRequests = await db.select({
@@ -1275,13 +1285,19 @@ export async function registerRoutes(
       verifiedAt: users.verifiedAt,
     }).from(users).orderBy(users.createdAt);
     
+    // Decrypt emails for admin view
+    const decryptedUsers = allUsers.map(u => ({
+      ...u,
+      email: decrypt(u.email || ""),
+    }));
+    
     const filteredUsers = search 
-      ? allUsers.filter(u => 
+      ? decryptedUsers.filter(u => 
           u.username?.toLowerCase().includes(search) ||
           u.email?.toLowerCase().includes(search) ||
           u.stakeUsername?.toLowerCase().includes(search)
         )
-      : allUsers;
+      : decryptedUsers;
     
     return res.json({ users: filteredUsers, total: allUsers.length });
   });
