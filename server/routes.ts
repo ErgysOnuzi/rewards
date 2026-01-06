@@ -335,17 +335,8 @@ export async function registerRoutes(
   
   // Submit verification request with screenshot
   app.post("/api/verification/submit", upload.single("screenshot"), async (req: Request, res: Response) => {
-    // Debug logging for session
-    console.log("[Verification] Session check:", {
-      hasSession: !!req.session,
-      sessionId: req.session?.id,
-      userId: (req.session as any)?.userId,
-      cookies: req.cookies ? Object.keys(req.cookies) : [],
-    });
-    
     const userId = getCurrentUser(req);
     if (!userId) {
-      console.log("[Verification] Not authenticated - no userId in session");
       return res.status(401).json({ message: "Not authenticated" });
     }
     
@@ -1846,13 +1837,12 @@ export async function registerRoutes(
   
   // Get current user's verification status
   app.get("/api/verification/status", async (req: Request, res: Response) => {
-    const user = req.user as any;
-    if (!user?.claims?.sub) {
+    const userId = getCurrentUser(req);
+    if (!userId) {
       return res.status(401).json({ message: "Not authenticated" });
     }
     
     try {
-      const userId = user.claims.sub;
       const [userData] = await db.select().from(users).where(eq(users.id, userId));
       
       if (!userData) {
@@ -1882,13 +1872,12 @@ export async function registerRoutes(
   
   // Accept security disclaimer
   app.post("/api/verification/accept-disclaimer", async (req: Request, res: Response) => {
-    const user = req.user as any;
-    if (!user?.claims?.sub) {
+    const userId = getCurrentUser(req);
+    if (!userId) {
       return res.status(401).json({ message: "Not authenticated" });
     }
     
     try {
-      const userId = user.claims.sub;
       await db.update(users).set({
         securityDisclaimerAccepted: true,
         updatedAt: new Date(),
