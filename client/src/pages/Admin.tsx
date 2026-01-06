@@ -296,6 +296,39 @@ export default function Admin() {
 
   const pendingVerifications = verificationQueuesData?.pendingRequests || [];
 
+  // All users search and query
+  const [usersSearch, setUsersSearch] = useState("");
+  const { data: allUsersData, refetch: refetchAllUsers } = useQuery<{ users: VerificationUser[]; total: number }>({
+    queryKey: ["/api/admin/users", usersSearch],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/users?search=${encodeURIComponent(usersSearch)}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: isAuthenticated === true,
+  });
+
+  // Stake.us spreadsheet search and query
+  const [spreadsheetUsSearch, setSpreadsheetUsSearch] = useState("");
+  const { data: spreadsheetUsData } = useQuery<{ users: { stakeId: string; wagered: number }[]; total: number; platformLabel: string }>({
+    queryKey: ["/api/admin/spreadsheet/us", spreadsheetUsSearch],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/spreadsheet/us?search=${encodeURIComponent(spreadsheetUsSearch)}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: isAuthenticated === true,
+  });
+
+  // Stake.com spreadsheet search and query
+  const [spreadsheetComSearch, setSpreadsheetComSearch] = useState("");
+  const { data: spreadsheetComData } = useQuery<{ users: { stakeId: string; wagered: number }[]; total: number; platformLabel: string }>({
+    queryKey: ["/api/admin/spreadsheet/com", spreadsheetComSearch],
+    queryFn: async () => {
+      const res = await fetch(`/api/admin/spreadsheet/com?search=${encodeURIComponent(spreadsheetComSearch)}`, { credentials: "include" });
+      return res.json();
+    },
+    enabled: isAuthenticated === true,
+  });
+
   const processVerification = useMutation({
     mutationFn: async ({ id, status, admin_notes }: { id: number; status: "approved" | "rejected"; admin_notes?: string }) => {
       return apiRequest("POST", "/api/admin/verifications/process", { id, status, admin_notes });
@@ -551,6 +584,15 @@ export default function Admin() {
               <TabsTrigger value="verifications" data-testid="tab-verifications" className="text-xs sm:text-sm">
                 <UserCheck className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Verify</span>
                 {pendingVerifications.length > 0 && <Badge variant="destructive" className="ml-1 text-xs">{pendingVerifications.length}</Badge>}
+              </TabsTrigger>
+              <TabsTrigger value="all-users" data-testid="tab-all-users" className="text-xs sm:text-sm">
+                <Users className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Users</span>
+              </TabsTrigger>
+              <TabsTrigger value="spreadsheet-us" data-testid="tab-spreadsheet-us" className="text-xs sm:text-sm">
+                <Database className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Stake.us</span>
+              </TabsTrigger>
+              <TabsTrigger value="spreadsheet-com" data-testid="tab-spreadsheet-com" className="text-xs sm:text-sm">
+                <Database className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Stake.com</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -1237,6 +1279,173 @@ export default function Admin() {
                 </CardContent>
               </Card>
             </div>
+          </TabsContent>
+
+          {/* All Users Tab */}
+          <TabsContent value="all-users" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Users className="w-5 h-5" />
+                  All Registered Users ({allUsersData?.total || 0})
+                </CardTitle>
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    placeholder="Search by username, email, or stake username..."
+                    value={usersSearch}
+                    onChange={(e) => setUsersSearch(e.target.value)}
+                    className="max-w-sm"
+                    data-testid="input-users-search"
+                  />
+                  <Button onClick={() => refetchAllUsers()} size="sm" variant="outline" data-testid="button-users-refresh">
+                    <RefreshCw className="w-4 h-4" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-2">Username</th>
+                        <th className="text-left py-2 px-2">Email</th>
+                        <th className="text-left py-2 px-2">Stake Username</th>
+                        <th className="text-left py-2 px-2">Platform</th>
+                        <th className="text-left py-2 px-2">Status</th>
+                        <th className="text-left py-2 px-2">Registered</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {allUsersData?.users?.map((u) => (
+                        <tr key={u.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-2 font-medium">@{u.username}</td>
+                          <td className="py-2 px-2 text-muted-foreground">{u.email || "-"}</td>
+                          <td className="py-2 px-2">{u.stakeUsername || "-"}</td>
+                          <td className="py-2 px-2">{u.stakePlatform?.toUpperCase() || "-"}</td>
+                          <td className="py-2 px-2">
+                            <Badge variant={u.verificationStatus === "verified" ? "default" : u.verificationStatus === "pending" ? "secondary" : "outline"}>
+                              {u.verificationStatus || "unverified"}
+                            </Badge>
+                          </td>
+                          <td className="py-2 px-2 text-muted-foreground text-xs">
+                            {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {(!allUsersData?.users || allUsersData.users.length === 0) && (
+                    <div className="text-center text-muted-foreground py-8">No users found</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Stake.us Spreadsheet Tab */}
+          <TabsContent value="spreadsheet-us" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Stake.us Users ({spreadsheetUsData?.total || 0})
+                </CardTitle>
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    placeholder="Search by username..."
+                    value={spreadsheetUsSearch}
+                    onChange={(e) => setSpreadsheetUsSearch(e.target.value)}
+                    className="max-w-sm"
+                    data-testid="input-spreadsheet-us-search"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-card">
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-2">#</th>
+                        <th className="text-left py-2 px-2">Username</th>
+                        <th className="text-right py-2 px-2">Wagered (2026)</th>
+                        <th className="text-right py-2 px-2">Tickets</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {spreadsheetUsData?.users?.slice(0, 100).map((u, i) => (
+                        <tr key={u.stakeId} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-2 text-muted-foreground">{i + 1}</td>
+                          <td className="py-2 px-2 font-medium">{u.stakeId}</td>
+                          <td className="py-2 px-2 text-right font-mono">${u.wagered.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right font-mono">{Math.floor(u.wagered / 1000)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {spreadsheetUsData?.users && spreadsheetUsData.users.length > 100 && (
+                    <div className="text-center text-muted-foreground py-2 text-sm">
+                      Showing 100 of {spreadsheetUsData.users.length} users
+                    </div>
+                  )}
+                  {(!spreadsheetUsData?.users || spreadsheetUsData.users.length === 0) && (
+                    <div className="text-center text-muted-foreground py-8">No users found</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Stake.com Spreadsheet Tab */}
+          <TabsContent value="spreadsheet-com" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Database className="w-5 h-5" />
+                  Stake.com Users ({spreadsheetComData?.total || 0})
+                </CardTitle>
+                <div className="flex items-center gap-2 mt-2">
+                  <Input
+                    placeholder="Search by username..."
+                    value={spreadsheetComSearch}
+                    onChange={(e) => setSpreadsheetComSearch(e.target.value)}
+                    className="max-w-sm"
+                    data-testid="input-spreadsheet-com-search"
+                  />
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                  <table className="w-full text-sm">
+                    <thead className="sticky top-0 bg-card">
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-2">#</th>
+                        <th className="text-left py-2 px-2">Username</th>
+                        <th className="text-right py-2 px-2">Wagered (2026)</th>
+                        <th className="text-right py-2 px-2">Tickets</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {spreadsheetComData?.users?.slice(0, 100).map((u, i) => (
+                        <tr key={u.stakeId} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-2 text-muted-foreground">{i + 1}</td>
+                          <td className="py-2 px-2 font-medium">{u.stakeId}</td>
+                          <td className="py-2 px-2 text-right font-mono">${u.wagered.toLocaleString()}</td>
+                          <td className="py-2 px-2 text-right font-mono">{Math.floor(u.wagered / 1000)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  {spreadsheetComData?.users && spreadsheetComData.users.length > 100 && (
+                    <div className="text-center text-muted-foreground py-2 text-sm">
+                      Showing 100 of {spreadsheetComData.users.length} users
+                    </div>
+                  )}
+                  {(!spreadsheetComData?.users || spreadsheetComData.users.length === 0) && (
+                    <div className="text-center text-muted-foreground py-8">No users found</div>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>

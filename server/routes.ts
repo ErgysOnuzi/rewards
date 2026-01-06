@@ -1249,6 +1249,59 @@ export async function registerRoutes(
     }
   });
 
+  // =================== ALL USERS ===================
+  app.get("/api/admin/users", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const search = (req.query.search as string || "").toLowerCase().trim();
+    
+    const allUsers = await db.select({
+      id: users.id,
+      username: users.username,
+      email: users.email,
+      stakeUsername: users.stakeUsername,
+      stakePlatform: users.stakePlatform,
+      verificationStatus: users.verificationStatus,
+      createdAt: users.createdAt,
+      verifiedAt: users.verifiedAt,
+    }).from(users).orderBy(users.createdAt);
+    
+    const filteredUsers = search 
+      ? allUsers.filter(u => 
+          u.username?.toLowerCase().includes(search) ||
+          u.email?.toLowerCase().includes(search) ||
+          u.stakeUsername?.toLowerCase().includes(search)
+        )
+      : allUsers;
+    
+    return res.json({ users: filteredUsers, total: allUsers.length });
+  });
+
+  // =================== WEIGHTED SPREADSHEET DATA ===================
+  app.get("/api/admin/spreadsheet/:domain", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const domain = req.params.domain as "us" | "com";
+    if (!["us", "com"].includes(domain)) {
+      return res.status(400).json({ message: "Invalid domain. Must be 'us' or 'com'" });
+    }
+    
+    const search = (req.query.search as string || "").toLowerCase().trim();
+    const { getAllWeightedUsers } = await import("./lib/sheets");
+    
+    const allData = getAllWeightedUsers(domain);
+    const filteredData = search 
+      ? allData.filter(u => u.stakeId.toLowerCase().includes(search))
+      : allData;
+    
+    return res.json({
+      domain,
+      users: filteredData,
+      total: allData.length,
+      platformLabel: domain === "us" ? "Stake.us" : "Stake.com",
+    });
+  });
+
   // =================== USER FLAGS (BLACKLIST/ALLOWLIST/DISPUTED) ===================
   const userFlagSchema = z.object({
     stakeId: z.string().min(1),

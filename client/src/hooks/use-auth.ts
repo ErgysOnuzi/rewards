@@ -28,7 +28,8 @@ interface LoginParams {
 interface RegisterParams {
   username: string;
   password: string;
-  email?: string;
+  email: string;
+  stakePlatform: "us" | "com";
 }
 
 export function useAuth() {
