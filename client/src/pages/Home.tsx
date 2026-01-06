@@ -1,7 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
-import StakeIdForm from "@/components/StakeIdForm";
 import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatus";
 import CaseOpening, { CaseSpinResult, BonusStatus } from "@/components/CaseOpening";
 import Footer from "@/components/Footer";
@@ -9,6 +8,9 @@ import { useToast } from "@/hooks/use-toast";
 import { safeJsonParse } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
 import { useLocation } from "wouter";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Loader2, LogIn, ShieldCheck } from "lucide-react";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
@@ -16,7 +18,7 @@ export default function Home() {
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
   const { toast } = useToast();
-  const { user, isAuthenticated } = useAuth();
+  const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
 
   const updateBonusStatusFromTicketData = (data: { can_daily_bonus: boolean; next_bonus_at?: string }) => {
@@ -47,27 +49,7 @@ export default function Home() {
     }
   };
 
-  const handleLookup = async (stakeId: string) => {
-    // Check if user is logged in
-    if (!isAuthenticated) {
-      toast({
-        title: "Login Required",
-        description: "Please login first to check your tickets.",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // Check if verification is completed
-    if (user?.verificationStatus !== "verified") {
-      toast({
-        title: "Verification Required",
-        description: "Your account verification is not completed. Please complete verification first.",
-        variant: "destructive",
-      });
-      return;
-    }
-
+  const fetchTicketData = async (stakeId: string, domain: string) => {
     setIsLoading(true);
     setError(null);
 
@@ -75,13 +57,13 @@ export default function Home() {
       const response = await fetch("/api/lookup", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stake_id: stakeId }),
+        body: JSON.stringify({ stake_id: stakeId, domain }),
       });
 
       const data = await safeJsonParse(response);
 
       if (!response.ok) {
-        throw new Error(data.message || "Failed to lookup Stake ID");
+        throw new Error(data.message || "Failed to load ticket data");
       }
 
       setTicketData({
@@ -108,6 +90,13 @@ export default function Home() {
       setIsLoading(false);
     }
   };
+
+  // Auto-fetch ticket data when user is verified
+  useEffect(() => {
+    if (!authLoading && isAuthenticated && user?.verificationStatus === "verified" && user?.stakeUsername) {
+      fetchTicketData(user.stakeUsername, user.stakePlatform || "com");
+    }
+  }, [authLoading, isAuthenticated, user?.verificationStatus, user?.stakeUsername, user?.stakePlatform]);
 
   const handleSpin = async (): Promise<CaseSpinResult> => {
     if (!ticketData) {
@@ -248,6 +237,87 @@ export default function Home() {
     }
   };
 
+  // Show loading state while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <main className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 animate-spin text-muted-foreground" />
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Show login prompt if not authenticated
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <main className="flex-1">
+          <div className="max-w-4xl mx-auto px-4 space-y-12">
+            <HeroSection />
+            <Card className="max-w-md mx-auto">
+              <CardContent className="pt-6 text-center space-y-4">
+                <LogIn className="w-12 h-12 mx-auto text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Login Required</h3>
+                <p className="text-sm text-muted-foreground">
+                  Please login to check your tickets and spin for prizes.
+                </p>
+                <Button onClick={() => navigate("/login")} className="w-full" data-testid="button-login-prompt">
+                  Login
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Don't have an account?{" "}
+                  <button 
+                    onClick={() => navigate("/register")} 
+                    className="text-primary underline"
+                    data-testid="link-register-prompt"
+                  >
+                    Register here
+                  </button>
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
+  // Show verification prompt if not verified
+  if (user?.verificationStatus !== "verified") {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Header />
+        <main className="flex-1">
+          <div className="max-w-4xl mx-auto px-4 space-y-12">
+            <HeroSection />
+            <Card className="max-w-md mx-auto">
+              <CardContent className="pt-6 text-center space-y-4">
+                <ShieldCheck className="w-12 h-12 mx-auto text-muted-foreground" />
+                <h3 className="text-lg font-semibold">Verification Required</h3>
+                <p className="text-sm text-muted-foreground">
+                  {user?.verificationStatus === "pending" 
+                    ? "Your verification is pending admin review. Please check back later."
+                    : "Please complete account verification to access spins."}
+                </p>
+                {user?.verificationStatus !== "pending" && (
+                  <Button onClick={() => navigate("/verify")} className="w-full" data-testid="button-verify-prompt">
+                    Complete Verification
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </main>
+        <Footer />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header 
@@ -260,13 +330,27 @@ export default function Home() {
         <div className="max-w-4xl mx-auto px-4 space-y-12">
           <HeroSection />
           
-          <StakeIdForm 
-            onSubmit={handleLookup}
-            isLoading={isLoading}
-            error={error}
-          />
-
-          {ticketData && (
+          {isLoading ? (
+            <Card className="max-w-md mx-auto">
+              <CardContent className="pt-6 text-center space-y-4">
+                <Loader2 className="w-8 h-8 mx-auto animate-spin text-primary" />
+                <p className="text-sm text-muted-foreground">Loading your ticket data...</p>
+              </CardContent>
+            </Card>
+          ) : error ? (
+            <Card className="max-w-md mx-auto">
+              <CardContent className="pt-6 text-center space-y-4">
+                <p className="text-sm text-destructive">{error}</p>
+                <Button 
+                  onClick={() => user?.stakeUsername && fetchTicketData(user.stakeUsername, user.stakePlatform || "com")}
+                  variant="outline"
+                  data-testid="button-retry-load"
+                >
+                  Retry
+                </Button>
+              </CardContent>
+            </Card>
+          ) : ticketData ? (
             <div className="space-y-8 animate-fade-in-up">
               <TicketStatus 
                 data={ticketData}
@@ -284,7 +368,7 @@ export default function Home() {
                 onBonusUsed={handleBonusUsed}
               />
             </div>
-          )}
+          ) : null}
         </div>
       </main>
 

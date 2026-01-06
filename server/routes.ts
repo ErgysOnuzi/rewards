@@ -532,13 +532,36 @@ export async function registerRoutes(
 
   app.post("/api/lookup", async (req: Request, res: Response) => {
     try {
-      const parsed = lookupRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
-      const domain = parsed.domain || "com";
+      // Require authentication
+      const sessionUserId = (req.session as any)?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Please log in to view your tickets." } as ErrorResponse);
+      }
+
+      // Get logged-in user
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      if (!loggedInUser) {
+        return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
+      }
+
+      // Check if user is verified
+      if (loggedInUser.verificationStatus !== "verified") {
+        return res.status(403).json({ 
+          message: "Account must be verified to view tickets." 
+        } as ErrorResponse);
+      }
+
+      // Use logged-in user's stake username - users can only lookup their own data
+      const stakeId = loggedInUser.stakeUsername?.toLowerCase();
+      if (!stakeId) {
+        return res.status(400).json({ message: "No Stake username linked to your account." } as ErrorResponse);
+      }
+
+      const domain = (loggedInUser.stakePlatform === "us" ? "us" : "com") as "us" | "com";
 
       const wagerRow = await getWagerRow(stakeId);
       if (!wagerRow) {
-        return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
+        return res.status(404).json({ message: "Your Stake ID was not found in our records." } as ErrorResponse);
       }
 
       // NGR sheet = lifetime wagered (for display only)
