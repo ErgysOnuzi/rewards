@@ -335,10 +335,21 @@ export async function registerRoutes(
   
   // Submit verification request with screenshot
   app.post("/api/verification/submit", upload.single("screenshot"), async (req: Request, res: Response) => {
+    // Debug: Log session state for troubleshooting
+    console.log("[Verification Submit] Session debug:", {
+      hasSession: !!req.session,
+      sessionId: req.session?.id,
+      userId: (req.session as any)?.userId,
+      cookies: Object.keys(req.cookies || {}),
+      hasCookie: !!req.cookies?.["connect.sid"],
+    });
+    
     const userId = getCurrentUser(req);
     if (!userId) {
+      console.log("[Verification Submit] Auth failed - no userId in session");
       return res.status(401).json({ message: "Not authenticated" });
     }
+    console.log("[Verification Submit] Auth success - userId:", userId);
     
     // Rate limit check
     const rateCheck = checkVerificationRateLimit(userId);
