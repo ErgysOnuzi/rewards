@@ -10,7 +10,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 
 interface HeaderProps {
   walletBalance?: number;
@@ -23,8 +23,8 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
   const hasData = stakeId !== undefined;
 
   const getInitials = () => {
-    if (user?.firstName && user?.lastName) {
-      return `${user.firstName[0]}${user.lastName[0]}`.toUpperCase();
+    if (user?.username) {
+      return user.username.slice(0, 2).toUpperCase();
     }
     if (user?.email) {
       return user.email[0].toUpperCase();
@@ -74,15 +74,14 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
               <DropdownMenuTrigger asChild>
                 <Button variant="ghost" size="icon" className="rounded-full" data-testid="button-user-menu">
                   <Avatar className="w-8 h-8">
-                    <AvatarImage src={user.profileImageUrl || undefined} alt={user.firstName || "User"} />
                     <AvatarFallback className="text-xs">{getInitials()}</AvatarFallback>
                   </Avatar>
                 </Button>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="end" className="w-56">
                 <div className="px-2 py-1.5">
-                  <p className="text-sm font-medium">{user.firstName} {user.lastName}</p>
-                  <p className="text-xs text-muted-foreground">{user.email}</p>
+                  <p className="text-sm font-medium">@{user.username}</p>
+                  {user.email && <p className="text-xs text-muted-foreground">{user.email}</p>}
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
@@ -100,10 +99,10 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
             </DropdownMenu>
           ) : (
             <Button size="sm" asChild data-testid="button-login">
-              <a href="/api/login">
+              <Link href="/login">
                 <LogIn className="w-4 h-4 mr-1.5" />
                 Sign In
-              </a>
+              </Link>
             </Button>
           )}
         </div>
