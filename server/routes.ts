@@ -1588,9 +1588,24 @@ export async function registerRoutes(
     
     const stakeId = req.params.stakeId.toLowerCase();
     
-    // Get wager data from sheets
-    const wagerRow = await getWagerRow(stakeId);
+    // Check for wager override first (for testing)
+    const override = await getWagerOverride(stakeId);
+    
+    // Get wager data from sheets (fallback)
+    const sheetWagerRow = await getWagerRow(stakeId);
     const cacheStatus = getCacheStatus();
+    
+    // Use override if available, otherwise use sheet data
+    let wagerRow = sheetWagerRow;
+    let usingOverride = false;
+    
+    if (override) {
+      usingOverride = true;
+      wagerRow = {
+        stakeId,
+        wageredAmount: override.yearToDateWagered ?? 0,
+      };
+    }
     
     // Get local stats from database
     const spins = await db.select().from(spinLogs).where(eq(spinLogs.stakeId, stakeId)).orderBy(desc(spinLogs.timestamp));
@@ -1605,6 +1620,11 @@ export async function registerRoutes(
     return res.json({
       found: !!wagerRow,
       wagerData: wagerRow,
+      usingOverride,
+      overrideData: override ? {
+        lifetimeWagered: override.lifetimeWagered,
+        yearToDateWagered: override.yearToDateWagered,
+      } : null,
       sheetLastUpdated: cacheStatus.lastFetchTime,
       computedTickets: wagerRow ? calculateTickets(wagerRow.wageredAmount) : 0,
       localStats: {
