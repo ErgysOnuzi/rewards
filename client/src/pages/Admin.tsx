@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban, 
   Search, Shield, AlertTriangle, Settings, Download, Database,
-  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck
+  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -89,7 +89,11 @@ interface RateStats {
 
 interface UserLookup {
   found: boolean;
-  wagerData: { stakeId: string; wageredAmount: number; periodLabel: string } | null;
+  stakeId: string;
+  lifetimeWagered: number | null;
+  yearToDateWagered: number | null;
+  platform: string | null;
+  usingOverride: boolean;
   sheetLastUpdated: string | null;
   computedTickets: number;
   localStats: {
@@ -230,6 +234,8 @@ export default function Admin() {
   const [newFlag, setNewFlag] = useState({ stakeId: "", isBlacklisted: false, isAllowlisted: false, isDisputed: false, notes: "" });
   const [exportParams, setExportParams] = useState({ campaign: "", weekLabel: "", ticketUnit: 1000, wagerField: "Wagered_Weekly" });
   const [exportPreview, setExportPreview] = useState<any>(null);
+  const [passwordResetUser, setPasswordResetUser] = useState<{ id: string; username: string } | null>(null);
+  const [newPassword, setNewPassword] = useState("");
 
   useEffect(() => {
     fetch("/api/admin/verify", { credentials: "include" })
@@ -424,6 +430,20 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to remove flag", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const resetPassword = useMutation({
+    mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
+      return apiRequest("POST", "/api/admin/reset-password", { userId, newPassword });
+    },
+    onSuccess: (data: any) => {
+      setPasswordResetUser(null);
+      setNewPassword("");
+      toast({ title: "Password reset", description: `Password for ${data.username} has been reset.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to reset password", description: err.message, variant: "destructive" });
     },
   });
 
@@ -790,23 +810,30 @@ export default function Admin() {
                       <div className="text-destructive">User not found in sheet data</div>
                     ) : (
                       <>
-                        <div className="grid md:grid-cols-2 gap-4 text-sm">
+                        {lookupResult.usingOverride && (
+                          <Badge variant="secondary" className="mb-2">Using Test Override Data</Badge>
+                        )}
+                        <div className="grid md:grid-cols-3 gap-4 text-sm">
                           <div className="space-y-1">
-                            <h4 className="font-medium mb-2">Sheet Data</h4>
-                            <div><span className="text-muted-foreground">Stake ID:</span> {lookupResult.wagerData?.stakeId}</div>
-                            <div><span className="text-muted-foreground">Wagered:</span> {formatAmount(lookupResult.wagerData?.wageredAmount ?? 0)}</div>
-                            <div><span className="text-muted-foreground">Period:</span> {lookupResult.wagerData?.periodLabel}</div>
-                            <div><span className="text-muted-foreground">Tickets:</span> {lookupResult.computedTickets}</div>
+                            <h4 className="font-medium mb-2">Wager Data</h4>
+                            <div><span className="text-muted-foreground">Stake ID:</span> {lookupResult.stakeId}</div>
+                            <div><span className="text-muted-foreground">Lifetime Wagered:</span> {lookupResult.lifetimeWagered !== null ? formatAmount(lookupResult.lifetimeWagered) : "N/A"}</div>
+                            <div><span className="text-muted-foreground">2026 YTD Wagered:</span> {lookupResult.yearToDateWagered !== null ? formatAmount(lookupResult.yearToDateWagered) : "N/A"}</div>
+                            <div><span className="text-muted-foreground">Platform:</span> {lookupResult.platform ?? "N/A"}</div>
+                            <div><span className="text-muted-foreground">Tickets (from 2026):</span> {lookupResult.computedTickets}</div>
                             <div><span className="text-muted-foreground">Last Updated:</span> {lookupResult.sheetLastUpdated ? formatDate(lookupResult.sheetLastUpdated) : "N/A"}</div>
                           </div>
                           <div className="space-y-1">
-                            <h4 className="font-medium mb-2">Local Stats</h4>
-                            <div><span className="text-muted-foreground">Spins:</span> {lookupResult.localStats.totalSpins}</div>
+                            <h4 className="font-medium mb-2">Spin Stats</h4>
+                            <div><span className="text-muted-foreground">Total Spins:</span> {lookupResult.localStats.totalSpins}</div>
                             <div><span className="text-muted-foreground">Wins:</span> {lookupResult.localStats.wins}</div>
-                            <div><span className="text-muted-foreground">Wallet:</span> {formatAmount(lookupResult.localStats.walletBalance)}</div>
-                            <div><span className="text-muted-foreground">Bronze:</span> {lookupResult.localStats.spinBalances.bronze}</div>
-                            <div><span className="text-muted-foreground">Silver:</span> {lookupResult.localStats.spinBalances.silver}</div>
-                            <div><span className="text-muted-foreground">Gold:</span> {lookupResult.localStats.spinBalances.gold}</div>
+                            <div><span className="text-muted-foreground">Bronze Spins:</span> {lookupResult.localStats.spinBalances.bronze}</div>
+                            <div><span className="text-muted-foreground">Silver Spins:</span> {lookupResult.localStats.spinBalances.silver}</div>
+                            <div><span className="text-muted-foreground">Gold Spins:</span> {lookupResult.localStats.spinBalances.gold}</div>
+                          </div>
+                          <div className="space-y-1">
+                            <h4 className="font-medium mb-2">Wallet</h4>
+                            <div><span className="text-muted-foreground">Balance:</span> {formatAmount(lookupResult.localStats.walletBalance)}</div>
                           </div>
                         </div>
                         {lookupResult.flags && (
@@ -1313,6 +1340,7 @@ export default function Admin() {
                         <th className="text-left py-2 px-2">Platform</th>
                         <th className="text-left py-2 px-2">Status</th>
                         <th className="text-left py-2 px-2">Registered</th>
+                        <th className="text-left py-2 px-2">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1330,6 +1358,16 @@ export default function Admin() {
                           <td className="py-2 px-2 text-muted-foreground text-xs">
                             {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
                           </td>
+                          <td className="py-2 px-2">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => setPasswordResetUser({ id: u.id, username: u.username })}
+                              data-testid={`button-reset-password-${u.id}`}
+                            >
+                              <Key className="w-3 h-3 mr-1" /> Reset Password
+                            </Button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>
@@ -1338,6 +1376,43 @@ export default function Admin() {
                     <div className="text-center text-muted-foreground py-8">No users found</div>
                   )}
                 </div>
+
+                {/* Password Reset Dialog */}
+                {passwordResetUser && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setPasswordResetUser(null)}>
+                    <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                      <CardHeader>
+                        <CardTitle>Reset Password</CardTitle>
+                        <CardDescription>Set a new password for @{passwordResetUser.username}</CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="new-password">New Password</Label>
+                          <Input
+                            id="new-password"
+                            type="password"
+                            value={newPassword}
+                            onChange={(e) => setNewPassword(e.target.value)}
+                            placeholder="Enter new password (min 8 characters)"
+                            data-testid="input-new-password"
+                          />
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" onClick={() => setPasswordResetUser(null)} data-testid="button-cancel-reset">
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => resetPassword.mutate({ userId: passwordResetUser.id, newPassword })}
+                            disabled={newPassword.length < 8 || resetPassword.isPending}
+                            data-testid="button-confirm-reset"
+                          >
+                            {resetPassword.isPending ? "Resetting..." : "Reset Password"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>

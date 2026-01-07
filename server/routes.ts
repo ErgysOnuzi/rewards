@@ -1592,31 +1592,41 @@ export async function registerRoutes(
     const override = await getWagerOverride(stakeId);
     
     // Get wager data from NGR sheet (lifetime data)
-    const sheetWagerRow = await getWagerRow(stakeId);
+    const ngrData = await getWagerRow(stakeId);
     
-    // Also check weighted sheets (2026 data) - this is where US/COM users may be
+    // Get wager data from weighted sheets (2026 data)
     const weightedData = getWeightedWagerWithDomain(stakeId);
     
     const cacheStatus = getCacheStatus();
     
-    // Use override if available, otherwise use sheet data
-    let wagerRow = sheetWagerRow;
+    // Determine values - override takes precedence, then sheet data
+    let lifetimeWagered: number | null = null;
+    let yearToDateWagered: number | null = null;
+    let platform: string | null = null;
     let usingOverride = false;
     
     if (override) {
       usingOverride = true;
-      wagerRow = {
-        stakeId,
-        wageredAmount: override.yearToDateWagered ?? 0,
-      };
-    } else if (!sheetWagerRow && weightedData.wager > 0) {
-      // User not in NGR sheet but found in weighted sheets
-      wagerRow = {
-        stakeId,
-        wageredAmount: weightedData.wager,
-        periodLabel: `2026 (${weightedData.domain === "us" ? "Stake.us" : "Stake.com"})`,
-      };
+      lifetimeWagered = override.lifetimeWagered;
+      yearToDateWagered = override.yearToDateWagered;
+      platform = "Override (Test Data)";
+    } else {
+      // NGR sheet = lifetime wagered
+      if (ngrData) {
+        lifetimeWagered = ngrData.wageredAmount;
+      }
+      // Weighted sheets = 2026 YTD wagered
+      if (weightedData.wager > 0) {
+        yearToDateWagered = weightedData.wager;
+        platform = weightedData.domain === "us" ? "Stake.us" : "Stake.com";
+      }
     }
+    
+    // User is found if they have data in any source
+    const found = lifetimeWagered !== null || yearToDateWagered !== null;
+    
+    // Tickets are calculated from 2026 YTD wagered amount
+    const ticketSource = yearToDateWagered ?? 0;
     
     // Get local stats from database
     const spins = await db.select().from(spinLogs).where(eq(spinLogs.stakeId, stakeId)).orderBy(desc(spinLogs.timestamp));
@@ -1629,15 +1639,14 @@ export async function registerRoutes(
     const lastSpin = spins[0];
 
     return res.json({
-      found: !!wagerRow,
-      wagerData: wagerRow,
+      found,
+      stakeId,
+      lifetimeWagered,
+      yearToDateWagered,
+      platform,
       usingOverride,
-      overrideData: override ? {
-        lifetimeWagered: override.lifetimeWagered,
-        yearToDateWagered: override.yearToDateWagered,
-      } : null,
       sheetLastUpdated: cacheStatus.lastFetchTime,
-      computedTickets: wagerRow ? calculateTickets(wagerRow.wageredAmount) : 0,
+      computedTickets: calculateTickets(ticketSource),
       localStats: {
         totalSpins: spins.length,
         wins: winCount,
@@ -2208,6 +2217,53 @@ export async function registerRoutes(
       }
       console.error("Process verification error:", err);
       return res.status(500).json({ message: "Failed to process verification" });
+    }
+  });
+
+  // =================== ADMIN PASSWORD RESET ===================
+  // Admin can reset a user's password to a new value
+  app.post("/api/admin/reset-password", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { userId, newPassword } = req.body;
+      
+      if (!userId || !newPassword) {
+        return res.status(400).json({ message: "userId and newPassword are required" });
+      }
+      
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      // Find the user
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Hash the new password
+      const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      
+      // Update the user's password
+      await db.update(users).set({
+        passwordHash,
+        updatedAt: new Date(),
+      }).where(eq(users.id, userId));
+      
+      // Log the password reset
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: user.stakeUsername || user.username,
+        details: `Admin reset password for user ${user.username} (ID: ${userId})`,
+      });
+      
+      console.log(`[Admin] Password reset for user ${user.username} (${userId})`);
+      return res.json({ success: true, username: user.username });
+    } catch (err) {
+      console.error("Admin password reset error:", err);
+      return res.status(500).json({ message: "Failed to reset password" });
     }
   });
 
