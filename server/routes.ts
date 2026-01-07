@@ -881,10 +881,20 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
       }
 
-      // Check if user exists in sheet
-      const wagerRow = await getWagerRow(stakeId);
-      if (!wagerRow) {
-        return res.status(404).json({ message: "Stake ID not found in wagering data" } as ErrorResponse);
+      // Check for database override first (for manually added users)
+      const override = await getWagerOverride(stakeId);
+      let wageredAmount = 0;
+      
+      if (override && (override.lifetimeWagered !== null || override.yearToDateWagered !== null)) {
+        // Use override values (for testing/manual users)
+        wageredAmount = override.yearToDateWagered ?? override.lifetimeWagered ?? 0;
+      } else {
+        // Fall back to Google Sheets data
+        const wagerRow = await getWagerRow(stakeId);
+        if (!wagerRow) {
+          return res.status(404).json({ message: "Stake ID not found in wagering data" } as ErrorResponse);
+        }
+        wageredAmount = wagerRow.wageredAmount;
       }
 
       // Get or create user state
@@ -945,7 +955,7 @@ export async function registerRoutes(
 
       await db.insert(spinLogs).values({
         stakeId,
-        wageredAmount: wagerRow.wageredAmount,
+        wageredAmount,
         spinNumber,
         result: isWin ? "WIN" : "LOSE",
         prizeLabel: `[BONUS] ${prize.label}`,
