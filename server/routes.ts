@@ -18,7 +18,7 @@ import type {
   LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
-import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus } from "./lib/sheets";
+import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus, getWeightedWagerWithDomain } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
@@ -1591,8 +1591,12 @@ export async function registerRoutes(
     // Check for wager override first (for testing)
     const override = await getWagerOverride(stakeId);
     
-    // Get wager data from sheets (fallback)
+    // Get wager data from NGR sheet (lifetime data)
     const sheetWagerRow = await getWagerRow(stakeId);
+    
+    // Also check weighted sheets (2026 data) - this is where US/COM users may be
+    const weightedData = getWeightedWagerWithDomain(stakeId);
+    
     const cacheStatus = getCacheStatus();
     
     // Use override if available, otherwise use sheet data
@@ -1604,6 +1608,13 @@ export async function registerRoutes(
       wagerRow = {
         stakeId,
         wageredAmount: override.yearToDateWagered ?? 0,
+      };
+    } else if (!sheetWagerRow && weightedData.wager > 0) {
+      // User not in NGR sheet but found in weighted sheets
+      wagerRow = {
+        stakeId,
+        wageredAmount: weightedData.wager,
+        periodLabel: `2026 (${weightedData.domain === "us" ? "Stake.us" : "Stake.com"})`,
       };
     }
     
