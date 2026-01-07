@@ -2272,7 +2272,7 @@ export async function registerRoutes(
     if (!await requireAdmin(req, res)) return;
     
     try {
-      const { username, password, email, stakeUsername, stakePlatform, verificationStatus } = req.body;
+      const { username, password, email, stakeUsername, stakePlatform, verificationStatus, lifetimeWagered, yearToDateWagered } = req.body;
       
       // Validation
       if (!username || !password || !stakeUsername) {
@@ -2321,6 +2321,29 @@ export async function registerRoutes(
         updatedAt: new Date(),
       }).returning();
       
+      // Create wager override if wagered amounts provided
+      const lifetimeAmount = lifetimeWagered ? parseInt(lifetimeWagered, 10) : null;
+      const ytdAmount = yearToDateWagered ? parseInt(yearToDateWagered, 10) : null;
+      
+      if (lifetimeAmount !== null || ytdAmount !== null) {
+        await db.insert(wagerOverrides).values({
+          stakeId: stakeUsername.toLowerCase(),
+          lifetimeWagered: lifetimeAmount,
+          yearToDateWagered: ytdAmount,
+          note: `Created by admin for manually added user ${username}`,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        }).onConflictDoUpdate({
+          target: wagerOverrides.stakeId,
+          set: {
+            lifetimeWagered: lifetimeAmount,
+            yearToDateWagered: ytdAmount,
+            note: `Updated by admin for manually added user ${username}`,
+            updatedAt: new Date(),
+          },
+        });
+      }
+      
       // Log the action
       logSecurityEvent({
         type: "auth_success",
@@ -2329,7 +2352,7 @@ export async function registerRoutes(
         details: `Admin created user ${username} with stake username ${stakeUsername}`,
       });
       
-      console.log(`[Admin] Created user ${username} (stake: ${stakeUsername}, platform: ${stakePlatform}, status: ${verificationStatus})`);
+      console.log(`[Admin] Created user ${username} (stake: ${stakeUsername}, platform: ${stakePlatform}, status: ${verificationStatus}, lifetime: ${lifetimeAmount || 'N/A'}, ytd: ${ytdAmount || 'N/A'})`);
       return res.json({ success: true, username: newUser.username, id: newUser.id });
     } catch (err) {
       console.error("Admin create user error:", err);

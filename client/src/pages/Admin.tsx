@@ -243,6 +243,8 @@ export default function Admin() {
     stakeUsername: "",
     stakePlatform: "us" as "us" | "com",
     verificationStatus: "verified" as "unverified" | "pending" | "verified" | "rejected",
+    lifetimeWagered: "",
+    yearToDateWagered: "",
   });
 
   useEffect(() => {
@@ -467,6 +469,8 @@ export default function Admin() {
         stakeUsername: "",
         stakePlatform: "us",
         verificationStatus: "verified",
+        lifetimeWagered: "",
+        yearToDateWagered: "",
       });
       refetchAllUsers();
       toast({ title: "User created", description: `User @${data.username} has been created successfully.` });
@@ -1543,6 +1547,30 @@ export default function Admin() {
                         <SelectItem value="rejected">Rejected</SelectItem>
                       </SelectContent>
                     </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-lifetime-wagered">Lifetime Wagered ($)</Label>
+                    <Input
+                      id="manual-lifetime-wagered"
+                      type="number"
+                      value={manualUser.lifetimeWagered}
+                      onChange={(e) => setManualUser({ ...manualUser, lifetimeWagered: e.target.value })}
+                      placeholder="e.g. 50000"
+                      data-testid="input-manual-lifetime-wagered"
+                    />
+                    <p className="text-xs text-muted-foreground">Total wagered amount (leave blank if unknown)</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-ytd-wagered">2026 YTD Wagered ($)</Label>
+                    <Input
+                      id="manual-ytd-wagered"
+                      type="number"
+                      value={manualUser.yearToDateWagered}
+                      onChange={(e) => setManualUser({ ...manualUser, yearToDateWagered: e.target.value })}
+                      placeholder="e.g. 10000"
+                      data-testid="input-manual-ytd-wagered"
+                    />
+                    <p className="text-xs text-muted-foreground">This determines ticket count (1 ticket per $1,000)</p>
                   </div>
                   <Button
                     type="submit"
