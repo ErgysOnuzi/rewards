@@ -98,10 +98,10 @@ export default function Verify() {
         });
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
+      if (file.size > 5 * 1024 * 1024) {
         toast({
           title: "File Too Large",
-          description: "Maximum file size is 10MB",
+          description: "Maximum file size is 5MB",
           variant: "destructive",
         });
         return;

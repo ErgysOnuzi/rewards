@@ -31,13 +31,15 @@ export default function Home() {
     });
   };
   
-  const refreshBonusStatus = async (stakeId: string) => {
+  const refreshBonusStatus = async () => {
     try {
       const response = await fetch("/api/spin/bonus/check", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stake_id: stakeId }),
+        credentials: "include",
+        body: JSON.stringify({}),
       });
+      if (!response.ok) return; // Silently fail if not authenticated
       const data = await safeJsonParse(response);
       setBonusStatus({
         available: data.available,
@@ -173,7 +175,8 @@ export default function Home() {
     const response = await fetch("/api/spin/bonus", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stake_id: ticketData.stakeId }),
+      credentials: "include",
+      body: JSON.stringify({}),
     });
 
     const data = await safeJsonParse(response);
@@ -197,9 +200,7 @@ export default function Home() {
   };
 
   const handleBonusUsed = () => {
-    if (ticketData) {
-      refreshBonusStatus(ticketData.stakeId);
-    }
+    refreshBonusStatus();
   };
 
   const handleWithdraw = async (amount: number) => {
@@ -209,7 +210,8 @@ export default function Home() {
       const response = await fetch("/api/wallet/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ stake_id: ticketData.stakeId, amount }),
+        credentials: "include",
+        body: JSON.stringify({ amount }),
       });
 
       const data = await safeJsonParse(response);
