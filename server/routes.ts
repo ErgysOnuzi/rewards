@@ -6,6 +6,7 @@ import {
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
   userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
+  wagerOverrides, passwordResetTokens,
   CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances,
   users, verificationRequests, registerSchema, loginSchema
 } from "@shared/schema";
@@ -113,6 +114,32 @@ async function checkUserBlacklist(stakeId: string): Promise<{ blacklisted: boole
   } catch (error) {
     console.error("Blacklist check failed for", stakeId, error);
     return { blacklisted: false, error: "Security check failed. Please try again." };
+  }
+}
+
+// Get wager override for testing (bypasses Google Sheets data)
+async function getWagerOverride(stakeId: string): Promise<{
+  lifetimeWagered: number | null;
+  yearToDateWagered: number | null;
+} | null> {
+  try {
+    const [override] = await db.select()
+      .from(wagerOverrides)
+      .where(eq(wagerOverrides.stakeId, stakeId.toLowerCase()));
+    if (override) {
+      console.log(`[WagerOverride] Found override for ${stakeId}:`, {
+        lifetime: override.lifetimeWagered,
+        ytd: override.yearToDateWagered,
+      });
+      return {
+        lifetimeWagered: override.lifetimeWagered,
+        yearToDateWagered: override.yearToDateWagered,
+      };
+    }
+    return null;
+  } catch (error) {
+    console.error("Wager override check failed:", error);
+    return null;
   }
 }
 
@@ -594,18 +621,34 @@ export async function registerRoutes(
 
       const domain = (loggedInUser.stakePlatform === "us" ? "us" : "com") as "us" | "com";
 
-      const wagerRow = await getWagerRow(stakeId);
-      if (!wagerRow) {
-        return res.status(404).json({ message: "Your Stake ID was not found in our records." } as ErrorResponse);
-      }
-
-      // NGR sheet = lifetime wagered (for display only)
-      const lifetimeWagered = wagerRow.wageredAmount;
+      // Check for database override first (for testing)
+      const override = await getWagerOverride(stakeId);
       
-      // Weighted sheets = 2026 wagers (for ticket calculation)
-      // NO FALLBACK: tickets come ONLY from weighted 2026 sheets
-      // If weighted sheets are empty (still 2025), users have 0 tickets
-      const weightedWager = getWeightedWager(stakeId, domain);
+      let lifetimeWagered: number;
+      let weightedWager: number;
+      let periodLabel = "2026";
+      
+      if (override && (override.lifetimeWagered !== null || override.yearToDateWagered !== null)) {
+        // Use override values (for testing)
+        lifetimeWagered = override.lifetimeWagered ?? 0;
+        weightedWager = override.yearToDateWagered ?? 0;
+        console.log(`[Lookup] Using override for ${stakeId}: lifetime=${lifetimeWagered}, ytd=${weightedWager}`);
+      } else {
+        // Fall back to Google Sheets data
+        const wagerRow = await getWagerRow(stakeId);
+        if (!wagerRow) {
+          return res.status(404).json({ message: "Your Stake ID was not found in our records." } as ErrorResponse);
+        }
+        
+        // NGR sheet = lifetime wagered (for display only)
+        lifetimeWagered = wagerRow.wageredAmount;
+        periodLabel = wagerRow.periodLabel || "2026";
+        
+        // Weighted sheets = 2026 wagers (for ticket calculation)
+        // NO FALLBACK: tickets come ONLY from weighted 2026 sheets
+        // If weighted sheets are empty (still 2025), users have 0 tickets
+        weightedWager = getWeightedWager(stakeId, domain);
+      }
       
       const ticketsTotal = calculateTickets(weightedWager);
       const ticketsUsed = await countSpinsForStakeId(stakeId);
@@ -619,8 +662,8 @@ export async function registerRoutes(
       const bonusStatus = await canUseDailyBonus(stakeId);
 
       const response: LookupResponse = {
-        stake_id: wagerRow.stakeId,
-        period_label: wagerRow.periodLabel,
+        stake_id: stakeId,
+        period_label: periodLabel,
         wagered_amount: weightedWager,
         lifetime_wagered: lifetimeWagered,
         tickets_total: ticketsTotal,
@@ -695,16 +738,29 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
       }
 
-      const wagerRow = await getWagerRow(stakeId);
-      if (!wagerRow) {
-        return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
-      }
-
       // Get domain from user's registered platform (default to com)
       const domain = (loggedInUser.stakePlatform === "us" ? "us" : "com") as "us" | "com";
       
-      // Calculate tickets from weighted 2026 sheets ONLY (no NGR fallback)
-      const weightedWager = getWeightedWager(stakeId, domain);
+      // Check for database override first (for testing)
+      const override = await getWagerOverride(stakeId);
+      let lifetimeWagered = 0;
+      let weightedWager = 0;
+      
+      if (override && (override.lifetimeWagered !== null || override.yearToDateWagered !== null)) {
+        // Use override values (for testing)
+        lifetimeWagered = override.lifetimeWagered ?? 0;
+        weightedWager = override.yearToDateWagered ?? 0;
+      } else {
+        // Fall back to Google Sheets data
+        const wagerRow = await getWagerRow(stakeId);
+        if (!wagerRow) {
+          return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
+        }
+        lifetimeWagered = wagerRow.wageredAmount;
+        weightedWager = getWeightedWager(stakeId, domain);
+      }
+      
+      // Calculate tickets from weighted wager
       const ticketsTotal = calculateTickets(weightedWager);
       const ticketsUsedBefore = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
@@ -724,7 +780,7 @@ export async function registerRoutes(
       // Log spin to database (use lowercase stakeId for consistent counting)
       await db.insert(spinLogs).values({
         stakeId: stakeId,
-        wageredAmount: wagerRow.wageredAmount,
+        wageredAmount: lifetimeWagered,
         spinNumber,
         result: isWin ? "WIN" : "LOSE",
         prizeLabel: prize.label,
@@ -747,8 +803,8 @@ export async function registerRoutes(
       }
 
       const response: SpinResponse = {
-        stake_id: wagerRow.stakeId,
-        wagered_amount: wagerRow.wageredAmount,
+        stake_id: stakeId,
+        wagered_amount: weightedWager,
         tickets_total: ticketsTotal,
         tickets_used_before: ticketsUsedBefore,
         tickets_used_after: ticketsUsedAfter,
@@ -1450,6 +1506,73 @@ export async function registerRoutes(
     const stakeId = req.params.stakeId.toLowerCase();
     await db.delete(userFlags).where(eq(userFlags.stakeId, stakeId));
     return res.json({ success: true });
+  });
+
+  // =================== WAGER OVERRIDES (TESTING) ===================
+  // Get wager override for a user
+  app.get("/api/admin/wager-override/:stakeId", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const stakeId = req.params.stakeId.toLowerCase();
+    const [override] = await db.select().from(wagerOverrides).where(eq(wagerOverrides.stakeId, stakeId));
+    return res.json({ override: override || null });
+  });
+
+  // Set wager override for a user (for testing)
+  app.post("/api/admin/wager-override", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { stakeId, lifetimeWagered, yearToDateWagered, note } = req.body;
+      
+      if (!stakeId) {
+        return res.status(400).json({ message: "stakeId is required" });
+      }
+      
+      const normalizedStakeId = stakeId.toLowerCase();
+      
+      // Upsert override
+      const [existing] = await db.select().from(wagerOverrides).where(eq(wagerOverrides.stakeId, normalizedStakeId));
+      
+      if (existing) {
+        await db.update(wagerOverrides)
+          .set({
+            lifetimeWagered: lifetimeWagered ?? existing.lifetimeWagered,
+            yearToDateWagered: yearToDateWagered ?? existing.yearToDateWagered,
+            note: note ?? existing.note,
+            updatedAt: new Date(),
+          })
+          .where(eq(wagerOverrides.stakeId, normalizedStakeId));
+      } else {
+        await db.insert(wagerOverrides).values({
+          stakeId: normalizedStakeId,
+          lifetimeWagered,
+          yearToDateWagered,
+          note,
+        });
+      }
+      
+      console.log(`[Admin] Set wager override for ${normalizedStakeId}: lifetime=${lifetimeWagered}, ytd=${yearToDateWagered}`);
+      return res.json({ success: true });
+    } catch (err) {
+      console.error("Wager override error:", err);
+      return res.status(400).json({ message: "Invalid request" });
+    }
+  });
+
+  // Delete wager override for a user
+  app.delete("/api/admin/wager-override/:stakeId", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const stakeId = req.params.stakeId.toLowerCase();
+    await db.delete(wagerOverrides).where(eq(wagerOverrides.stakeId, stakeId));
+    console.log(`[Admin] Deleted wager override for ${stakeId}`);
+    return res.json({ success: true });
+  });
+
+  // List all wager overrides
+  app.get("/api/admin/wager-overrides", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    const overrides = await db.select().from(wagerOverrides).orderBy(desc(wagerOverrides.updatedAt));
+    return res.json({ overrides });
   });
 
   // Check if allowlist mode is enabled
