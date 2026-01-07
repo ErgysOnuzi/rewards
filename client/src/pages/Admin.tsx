@@ -25,6 +25,7 @@ interface SpinLog {
   spinNumber: number;
   result: "WIN" | "LOSE";
   prizeLabel: string;
+  isBonus: boolean;
 }
 
 interface AdminLogsResponse {
@@ -1214,8 +1215,13 @@ export default function Admin() {
                         <div className="flex items-center gap-2 sm:gap-3">
                           {log.result === "WIN" ? <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-primary shrink-0" /> : <X className="w-4 h-4 sm:w-5 sm:h-5 text-muted-foreground shrink-0" />}
                           <div className="min-w-0">
-                            <div className="font-medium text-sm break-all">{log.stakeId}</div>
-                            <div className="text-xs text-muted-foreground">Spin #{log.spinNumber} - {formatAmount(log.wageredAmount)} wagered</div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-medium text-sm break-all">{log.stakeId}</span>
+                              {log.isBonus && <Badge variant="secondary" className="text-xs">Daily Bonus</Badge>}
+                            </div>
+                            <div className="text-xs text-muted-foreground">
+                              {log.isBonus ? "Daily bonus spin" : `Spin #${log.spinNumber} - ${formatAmount(log.wageredAmount)} wagered`}
+                            </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 shrink-0 ml-6 sm:ml-0">

@@ -1050,6 +1050,7 @@ export async function registerRoutes(
         spinNumber: log.spinNumber,
         result: log.result as "WIN" | "LOSE",
         prizeLabel: log.prizeLabel,
+        isBonus: log.isBonus,
       }));
 
       return res.json({
