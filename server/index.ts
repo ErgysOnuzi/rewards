@@ -16,6 +16,9 @@ enforceSecurityRequirements();
 const app = express();
 const httpServer = createServer(app);
 
+// Trust proxy for production (Replit uses reverse proxy)
+app.set("trust proxy", 1);
+
 declare module "http" {
   interface IncomingMessage {
     rawBody: unknown;
