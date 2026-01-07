@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban, 
   Search, Shield, AlertTriangle, Settings, Download, Database,
-  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key
+  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key, UserPlus
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -236,6 +236,14 @@ export default function Admin() {
   const [exportPreview, setExportPreview] = useState<any>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<{ id: string; username: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [manualUser, setManualUser] = useState({
+    username: "",
+    password: "",
+    email: "",
+    stakeUsername: "",
+    stakePlatform: "us" as "us" | "com",
+    verificationStatus: "verified" as "unverified" | "pending" | "verified" | "rejected",
+  });
 
   useEffect(() => {
     fetch("/api/admin/verify", { credentials: "include" })
@@ -447,6 +455,27 @@ export default function Admin() {
     },
   });
 
+  const createUser = useMutation({
+    mutationFn: async (userData: typeof manualUser) => {
+      return apiRequest("POST", "/api/admin/create-user", userData);
+    },
+    onSuccess: (data: any) => {
+      setManualUser({
+        username: "",
+        password: "",
+        email: "",
+        stakeUsername: "",
+        stakePlatform: "us",
+        verificationStatus: "verified",
+      });
+      refetchAllUsers();
+      toast({ title: "User created", description: `User @${data.username} has been created successfully.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
+    },
+  });
+
   const updateToggle = useMutation({
     mutationFn: async ({ key, value }: { key: string; value: string }) => {
       return apiRequest("POST", "/api/admin/toggles", { key, value });
@@ -607,6 +636,9 @@ export default function Admin() {
               </TabsTrigger>
               <TabsTrigger value="all-users" data-testid="tab-all-users" className="text-xs sm:text-sm">
                 <Users className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Users</span>
+              </TabsTrigger>
+              <TabsTrigger value="add-user" data-testid="tab-add-user" className="text-xs sm:text-sm">
+                <UserPlus className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Add User</span>
               </TabsTrigger>
               <TabsTrigger value="spreadsheet-us" data-testid="tab-spreadsheet-us" className="text-xs sm:text-sm">
                 <Database className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Stake.us</span>
@@ -1413,6 +1445,113 @@ export default function Admin() {
                     </Card>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Add User Tab */}
+          <TabsContent value="add-user" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <UserPlus className="w-5 h-5" />
+                  Add User Manually
+                </CardTitle>
+                <CardDescription>Create a new user with all their data</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    createUser.mutate(manualUser);
+                  }}
+                  className="space-y-4 max-w-md"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-username">Username (login name)</Label>
+                    <Input
+                      id="manual-username"
+                      value={manualUser.username}
+                      onChange={(e) => setManualUser({ ...manualUser, username: e.target.value })}
+                      placeholder="e.g. johndoe123"
+                      required
+                      data-testid="input-manual-username"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-password">Password</Label>
+                    <Input
+                      id="manual-password"
+                      type="password"
+                      value={manualUser.password}
+                      onChange={(e) => setManualUser({ ...manualUser, password: e.target.value })}
+                      placeholder="Minimum 8 characters"
+                      required
+                      data-testid="input-manual-password"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-email">Email (optional)</Label>
+                    <Input
+                      id="manual-email"
+                      type="email"
+                      value={manualUser.email}
+                      onChange={(e) => setManualUser({ ...manualUser, email: e.target.value })}
+                      placeholder="user@example.com"
+                      data-testid="input-manual-email"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="manual-stake-username">Stake Username</Label>
+                    <Input
+                      id="manual-stake-username"
+                      value={manualUser.stakeUsername}
+                      onChange={(e) => setManualUser({ ...manualUser, stakeUsername: e.target.value })}
+                      placeholder="Their Stake username"
+                      required
+                      data-testid="input-manual-stake-username"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Stake Platform</Label>
+                    <Select
+                      value={manualUser.stakePlatform}
+                      onValueChange={(v) => setManualUser({ ...manualUser, stakePlatform: v as "us" | "com" })}
+                    >
+                      <SelectTrigger data-testid="select-manual-platform">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="us">Stake.us</SelectItem>
+                        <SelectItem value="com">Stake.com</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Verification Status</Label>
+                    <Select
+                      value={manualUser.verificationStatus}
+                      onValueChange={(v) => setManualUser({ ...manualUser, verificationStatus: v as any })}
+                    >
+                      <SelectTrigger data-testid="select-manual-status">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="verified">Verified</SelectItem>
+                        <SelectItem value="pending">Pending</SelectItem>
+                        <SelectItem value="unverified">Unverified</SelectItem>
+                        <SelectItem value="rejected">Rejected</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <Button
+                    type="submit"
+                    disabled={!manualUser.username || !manualUser.password || manualUser.password.length < 8 || !manualUser.stakeUsername || createUser.isPending}
+                    data-testid="button-create-user"
+                  >
+                    {createUser.isPending ? "Creating..." : "Create User"}
+                  </Button>
+                </form>
               </CardContent>
             </Card>
           </TabsContent>

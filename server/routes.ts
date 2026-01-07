@@ -2267,5 +2267,75 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Create user manually
+  app.post("/api/admin/create-user", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { username, password, email, stakeUsername, stakePlatform, verificationStatus } = req.body;
+      
+      // Validation
+      if (!username || !password || !stakeUsername) {
+        return res.status(400).json({ message: "Username, password, and stake username are required" });
+      }
+      
+      if (password.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      if (!["us", "com"].includes(stakePlatform)) {
+        return res.status(400).json({ message: "Stake platform must be 'us' or 'com'" });
+      }
+      
+      if (!["unverified", "pending", "verified", "rejected"].includes(verificationStatus)) {
+        return res.status(400).json({ message: "Invalid verification status" });
+      }
+      
+      // Check if username already exists
+      const [existingUser] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
+      if (existingUser) {
+        return res.status(400).json({ message: "Username already exists" });
+      }
+      
+      // Check if stake username already registered
+      const [existingStake] = await db.select().from(users).where(eq(users.stakeUsername, stakeUsername.toLowerCase()));
+      if (existingStake) {
+        return res.status(400).json({ message: "Stake username already registered" });
+      }
+      
+      // Hash the password
+      const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
+      
+      // Encrypt email if provided
+      const encryptedEmail = email ? encrypt(email) : null;
+      
+      // Create the user
+      const [newUser] = await db.insert(users).values({
+        username: username.toLowerCase(),
+        passwordHash,
+        email: encryptedEmail,
+        stakeUsername: stakeUsername.toLowerCase(),
+        stakePlatform,
+        verificationStatus,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).returning();
+      
+      // Log the action
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: stakeUsername,
+        details: `Admin created user ${username} with stake username ${stakeUsername}`,
+      });
+      
+      console.log(`[Admin] Created user ${username} (stake: ${stakeUsername}, platform: ${stakePlatform}, status: ${verificationStatus})`);
+      return res.json({ success: true, username: newUser.username, id: newUser.id });
+    } catch (err) {
+      console.error("Admin create user error:", err);
+      return res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
   return httpServer;
 }
