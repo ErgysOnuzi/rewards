@@ -238,6 +238,8 @@ export default function Admin() {
   const [newPassword, setNewPassword] = useState("");
   const [verifyUser, setVerifyUser] = useState<{ id: string; username: string; currentStatus: string } | null>(null);
   const [newVerificationStatus, setNewVerificationStatus] = useState<string>("");
+  const [wagerEditUser, setWagerEditUser] = useState<{ id: string; username: string; stakeUsername: string } | null>(null);
+  const [wagerEditData, setWagerEditData] = useState({ lifetimeWagered: "", yearToDateWagered: "" });
   const [manualUser, setManualUser] = useState({
     username: "",
     password: "",
@@ -495,6 +497,20 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to update verification", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateWager = useMutation({
+    mutationFn: async ({ stakeUsername, lifetimeWagered, yearToDateWagered }: { stakeUsername: string; lifetimeWagered: string; yearToDateWagered: string }) => {
+      return apiRequest("POST", "/api/admin/update-wager", { stakeUsername, lifetimeWagered, yearToDateWagered });
+    },
+    onSuccess: (data: any) => {
+      setWagerEditUser(null);
+      setWagerEditData({ lifetimeWagered: "", yearToDateWagered: "" });
+      toast({ title: "Wager data updated", description: `Updated wager data for ${data.stakeUsername}. They now have ${data.tickets} tickets.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update wager data", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1433,6 +1449,19 @@ export default function Admin() {
                               >
                                 <UserCheck className="w-3 h-3 mr-1" /> Verify
                               </Button>
+                              {u.stakeUsername && (
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    setWagerEditUser({ id: u.id, username: u.username, stakeUsername: u.stakeUsername! });
+                                    setWagerEditData({ lifetimeWagered: "", yearToDateWagered: "" });
+                                  }}
+                                  data-testid={`button-wager-${u.id}`}
+                                >
+                                  <Activity className="w-3 h-3 mr-1" /> Wager
+                                </Button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1521,6 +1550,63 @@ export default function Admin() {
                             data-testid="button-confirm-verify"
                           >
                             {updateVerification.isPending ? "Updating..." : "Update Status"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Wager Edit Dialog */}
+                {wagerEditUser && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setWagerEditUser(null)}>
+                    <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                      <CardHeader>
+                        <CardTitle>Edit Wager Data</CardTitle>
+                        <CardDescription>
+                          Set wagered amounts for @{wagerEditUser.username}
+                          <br />
+                          <span className="text-xs">Stake username: <Badge variant="outline">{wagerEditUser.stakeUsername}</Badge></span>
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="wager-lifetime">Lifetime Wagered ($)</Label>
+                          <Input
+                            id="wager-lifetime"
+                            type="number"
+                            value={wagerEditData.lifetimeWagered}
+                            onChange={(e) => setWagerEditData({ ...wagerEditData, lifetimeWagered: e.target.value })}
+                            placeholder="e.g. 50000"
+                            data-testid="input-wager-lifetime"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label htmlFor="wager-ytd">2026 YTD Wagered ($)</Label>
+                          <Input
+                            id="wager-ytd"
+                            type="number"
+                            value={wagerEditData.yearToDateWagered}
+                            onChange={(e) => setWagerEditData({ ...wagerEditData, yearToDateWagered: e.target.value })}
+                            placeholder="e.g. 10000"
+                            data-testid="input-wager-ytd"
+                          />
+                          <p className="text-xs text-muted-foreground">This determines ticket count (1 ticket per $1,000)</p>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" onClick={() => setWagerEditUser(null)} data-testid="button-cancel-wager">
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => updateWager.mutate({ 
+                              stakeUsername: wagerEditUser.stakeUsername, 
+                              lifetimeWagered: wagerEditData.lifetimeWagered,
+                              yearToDateWagered: wagerEditData.yearToDateWagered,
+                            })}
+                            disabled={(!wagerEditData.lifetimeWagered && !wagerEditData.yearToDateWagered) || updateWager.isPending}
+                            data-testid="button-confirm-wager"
+                          >
+                            {updateWager.isPending ? "Saving..." : "Save Wager Data"}
                           </Button>
                         </div>
                       </CardContent>

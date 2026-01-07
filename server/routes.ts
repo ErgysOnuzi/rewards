@@ -2267,6 +2267,60 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Update wager data for a user
+  app.post("/api/admin/update-wager", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { stakeUsername, lifetimeWagered, yearToDateWagered } = req.body;
+      
+      if (!stakeUsername) {
+        return res.status(400).json({ message: "stakeUsername is required" });
+      }
+      
+      if (!lifetimeWagered && !yearToDateWagered) {
+        return res.status(400).json({ message: "At least one wagered amount is required" });
+      }
+      
+      const lifetimeAmount = lifetimeWagered ? parseInt(lifetimeWagered, 10) : null;
+      const ytdAmount = yearToDateWagered ? parseInt(yearToDateWagered, 10) : null;
+      
+      // Upsert wager override
+      await db.insert(wagerOverrides).values({
+        stakeId: stakeUsername.toLowerCase(),
+        lifetimeWagered: lifetimeAmount,
+        yearToDateWagered: ytdAmount,
+        note: `Admin set wager data`,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }).onConflictDoUpdate({
+        target: wagerOverrides.stakeId,
+        set: {
+          lifetimeWagered: lifetimeAmount,
+          yearToDateWagered: ytdAmount,
+          note: `Admin updated wager data`,
+          updatedAt: new Date(),
+        },
+      });
+      
+      const tickets = ytdAmount ? Math.floor(ytdAmount / 1000) : 0;
+      
+      // Log the action
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: stakeUsername,
+        details: `Admin set wager data: lifetime=${lifetimeAmount || 'N/A'}, ytd=${ytdAmount || 'N/A'}`,
+      });
+      
+      console.log(`[Admin] Set wager data for ${stakeUsername}: lifetime=${lifetimeAmount}, ytd=${ytdAmount}, tickets=${tickets}`);
+      return res.json({ success: true, stakeUsername, tickets });
+    } catch (err) {
+      console.error("Admin update wager error:", err);
+      return res.status(500).json({ message: "Failed to update wager data" });
+    }
+  });
+
   // Admin: Update user verification status
   app.post("/api/admin/update-verification", async (req: Request, res: Response) => {
     if (!await requireAdmin(req, res)) return;
