@@ -143,31 +143,43 @@ async function getWagerOverride(stakeId: string): Promise<{
   }
 }
 
-// Configure multer for file uploads
+// Configure multer for file uploads with security hardening
 const uploadsDir = path.join(process.cwd(), "uploads", "verification");
 if (!fs.existsSync(uploadsDir)) {
   fs.mkdirSync(uploadsDir, { recursive: true });
 }
+
+// Allowed file extensions and MIME types (double validation)
+const ALLOWED_EXTENSIONS = [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+const ALLOWED_MIME_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
     cb(null, uploadsDir);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    const ext = path.extname(file.originalname);
-    cb(null, `verification-${uniqueSuffix}${ext}`);
+    // SECURITY: Use cryptographically secure random bytes for filename
+    const uniqueSuffix = crypto.randomBytes(16).toString("hex");
+    // SECURITY: Sanitize extension - only allow whitelisted extensions
+    const ext = path.extname(file.originalname).toLowerCase();
+    const safeExt = ALLOWED_EXTENSIONS.includes(ext) ? ext : ".jpg";
+    cb(null, `verification-${uniqueSuffix}${safeExt}`);
   },
 });
 
 const upload = multer({
   storage,
   limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB max
+    fileSize: 5 * 1024 * 1024, // 5MB max (reduced from 10MB)
+    files: 1, // Only allow 1 file per request
   },
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/webp"];
-    if (allowedTypes.includes(file.mimetype)) {
+    // SECURITY: Validate both MIME type and file extension
+    const ext = path.extname(file.originalname).toLowerCase();
+    const mimeTypeValid = ALLOWED_MIME_TYPES.includes(file.mimetype);
+    const extensionValid = ALLOWED_EXTENSIONS.includes(ext);
+    
+    if (mimeTypeValid && extensionValid) {
       cb(null, true);
     } else {
       cb(new Error("Only image files (JPEG, PNG, GIF, WebP) are allowed"));
@@ -833,9 +845,32 @@ export async function registerRoutes(
   // Daily bonus spin endpoint (one free spin per 24 hours)
   app.post("/api/spin/bonus", async (req: Request, res: Response) => {
     try {
-      const parsed = lookupRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
-      const ipHash = hashIp(req.ip || "unknown");
+      // SECURITY: Require authentication
+      const sessionUserId = (req.session as any)?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Please log in to claim bonus." } as ErrorResponse);
+      }
+
+      // Get the logged-in user
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      if (!loggedInUser) {
+        return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
+      }
+
+      // Check if user is verified
+      if (loggedInUser.verificationStatus !== "verified") {
+        return res.status(403).json({ 
+          message: "Account must be verified before claiming bonus." 
+        } as ErrorResponse);
+      }
+
+      // SECURITY: Use the authenticated user's stake ID, not the one from request body
+      const stakeId = loggedInUser.stakeUsername?.toLowerCase();
+      if (!stakeId) {
+        return res.status(400).json({ message: "No Stake username linked to your account." } as ErrorResponse);
+      }
+      
+      const ipHash = hashIp(getClientIp(req));
 
       // Check blacklist - fail closed on error
       const blacklistCheck = await checkUserBlacklist(stakeId);
@@ -958,8 +993,23 @@ export async function registerRoutes(
   // Check bonus spin availability
   app.post("/api/spin/bonus/check", async (req: Request, res: Response) => {
     try {
-      const parsed = lookupRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
+      // SECURITY: Require authentication
+      const sessionUserId = (req.session as any)?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Please log in to check bonus status." } as ErrorResponse);
+      }
+
+      // Get the logged-in user
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      if (!loggedInUser) {
+        return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
+      }
+
+      // SECURITY: Use the authenticated user's stake ID
+      const stakeId = loggedInUser.stakeUsername?.toLowerCase();
+      if (!stakeId) {
+        return res.status(400).json({ message: "No Stake username linked to your account." } as ErrorResponse);
+      }
 
       const [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
       
@@ -1014,12 +1064,37 @@ export async function registerRoutes(
   });
 
 
-  // Request withdrawal to Stake account
+  // Request withdrawal to Stake account - REQUIRES AUTHENTICATION
   app.post("/api/wallet/withdraw", async (req: Request, res: Response) => {
     try {
+      // SECURITY: Require authentication
+      const sessionUserId = (req.session as any)?.userId;
+      if (!sessionUserId) {
+        return res.status(401).json({ message: "Authentication required" } as ErrorResponse);
+      }
+
+      // Get logged-in user
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      if (!loggedInUser) {
+        return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
+      }
+
+      // Check if user is verified
+      if (loggedInUser.verificationStatus !== "verified") {
+        return res.status(403).json({ 
+          message: "Account must be verified to request withdrawals." 
+        } as ErrorResponse);
+      }
+
       const parsed = withdrawRequestSchema.parse(req.body);
-      const stakeId = parsed.stake_id.toLowerCase();
-      const amount = parsed.amount;
+      const { amount } = parsed;
+      
+      // SECURITY: Always use the authenticated user's stake ID from the database
+      // The request body no longer accepts stake_id to prevent impersonation attacks
+      const stakeId = loggedInUser.stakeUsername?.toLowerCase();
+      if (!stakeId) {
+        return res.status(400).json({ message: "No Stake username linked to your account." } as ErrorResponse);
+      }
 
       // Check blacklist - fail closed on error
       const blacklistCheck = await checkUserBlacklist(stakeId);
@@ -1046,6 +1121,14 @@ export async function registerRoutes(
         amount,
         status: "pending",
       }).returning();
+
+      // Log security event
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId,
+        details: `Withdrawal request of $${amount} submitted`,
+      });
 
       // Don't log transaction yet - it's just a hold until approved
       const newPending = await getPendingWithdrawals(stakeId);

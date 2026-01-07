@@ -42,7 +42,7 @@ app.use(
       tableName: "sessions",
       createTableIfMissing: true,
     }),
-    secret: process.env.SESSION_SECRET || "dev-secret-change-in-production",
+    secret: process.env.SESSION_SECRET!, // Required - validated by enforceSecurityRequirements()
     resave: false,
     saveUninitialized: false,
     rolling: true, // Reset session expiry on each request (activity)

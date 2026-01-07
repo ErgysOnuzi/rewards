@@ -7,8 +7,13 @@ const AUTH_TAG_LENGTH = 16;
 function getEncryptionKey(): Buffer {
   const key = process.env.ENCRYPTION_KEY;
   if (!key) {
-    console.warn("[SECURITY] ENCRYPTION_KEY not set - using derived key from SESSION_SECRET");
-    const sessionSecret = process.env.SESSION_SECRET || "fallback-session-secret";
+    // In production, derive from SESSION_SECRET which is required
+    const sessionSecret = process.env.SESSION_SECRET;
+    if (!sessionSecret) {
+      // Fail hard - no insecure fallbacks
+      throw new Error("[FATAL] Neither ENCRYPTION_KEY nor SESSION_SECRET is set. Cannot encrypt data securely.");
+    }
+    console.warn("[SECURITY] ENCRYPTION_KEY not set - deriving from SESSION_SECRET");
     return crypto.createHash("sha256").update(sessionSecret).digest();
   }
   if (key.length === 64) {

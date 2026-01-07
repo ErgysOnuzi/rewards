@@ -286,9 +286,9 @@ export const purchaseSpinsRequestSchema = z.object({
   quantity: z.number().int().positive(),
 });
 
+// SECURITY: stake_id removed - authenticated user's stake ID is used from session
 export const withdrawRequestSchema = z.object({
-  stake_id: stakeIdSchema,
-  amount: z.number().int().positive(),
+  amount: z.number().int().positive().max(100000), // Max $100k per withdrawal
 });
 
 export const processWithdrawalSchema = z.object({

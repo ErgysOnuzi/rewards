@@ -86,18 +86,18 @@ export function enforceSecurityRequirements(): void {
     console.warn(`[SECURITY WARNING] ${warning}`);
   }
   
-  // Fail hard on errors in production
+  // SECURITY: Fail hard on errors in ALL environments - no insecure fallbacks
   if (!result.valid) {
     for (const error of result.errors) {
       console.error(`[SECURITY ERROR] ${error}`);
     }
     
-    if (process.env.NODE_ENV === "production") {
-      console.error("[FATAL] Application cannot start due to missing security requirements");
-      process.exit(1);
-    } else {
-      console.warn("[DEV MODE] Continuing despite missing secrets - DO NOT USE IN PRODUCTION");
-    }
+    console.error("[FATAL] Application cannot start due to missing security requirements");
+    console.error("Set the following environment variables:");
+    console.error("  - DATABASE_URL: PostgreSQL connection string");
+    console.error("  - SESSION_SECRET: At least 32 random characters");
+    console.error("  - ADMIN_PASSWORD: At least 12 characters");
+    process.exit(1);
   }
   
   console.log("[SECURITY] All required secrets validated");
