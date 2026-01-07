@@ -195,8 +195,21 @@ export async function registerRoutes(
         verificationStatus: "unverified",
       }).returning();
       
-      // Set session
+      // Set session and save explicitly
       (req.session as any).userId = newUser.id;
+      
+      // Explicitly save session to ensure it persists
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) {
+            console.error("[Register] Session save error:", err);
+            reject(err);
+          } else {
+            console.log("[Register] Session saved successfully for user:", newUser.id);
+            resolve();
+          }
+        });
+      });
       
       logSecurityEvent({
         type: "auth_success",
@@ -253,8 +266,21 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
-      // Set session
+      // Set session and save explicitly
       (req.session as any).userId = user.id;
+      
+      // Explicitly save session to ensure it persists
+      await new Promise<void>((resolve, reject) => {
+        req.session.save((err) => {
+          if (err) {
+            console.error("[Login] Session save error:", err);
+            reject(err);
+          } else {
+            console.log("[Login] Session saved successfully for user:", user.id);
+            resolve();
+          }
+        });
+      });
       
       logSecurityEvent({
         type: "auth_success",
@@ -298,8 +324,17 @@ export async function registerRoutes(
   
   // Get current session
   app.get("/api/auth/session", async (req: Request, res: Response) => {
+    // Debug logging for session issues
+    const sessionDebug = {
+      hasSession: !!req.session,
+      sessionId: req.session?.id?.substring(0, 8) + "...",
+      hasCookie: !!req.cookies?.["connect.sid"],
+      userId: (req.session as any)?.userId,
+    };
+    
     const userId = (req.session as any)?.userId;
     if (!userId) {
+      console.log("[Session Check] No userId found:", sessionDebug);
       return res.json({ user: null });
     }
     
