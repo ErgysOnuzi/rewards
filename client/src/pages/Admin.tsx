@@ -236,6 +236,8 @@ export default function Admin() {
   const [exportPreview, setExportPreview] = useState<any>(null);
   const [passwordResetUser, setPasswordResetUser] = useState<{ id: string; username: string } | null>(null);
   const [newPassword, setNewPassword] = useState("");
+  const [verifyUser, setVerifyUser] = useState<{ id: string; username: string; currentStatus: string } | null>(null);
+  const [newVerificationStatus, setNewVerificationStatus] = useState<string>("");
   const [manualUser, setManualUser] = useState({
     username: "",
     password: "",
@@ -477,6 +479,22 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to create user", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateVerification = useMutation({
+    mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
+      return apiRequest("POST", "/api/admin/update-verification", { userId, status });
+    },
+    onSuccess: (data: any) => {
+      setVerifyUser(null);
+      setNewVerificationStatus("");
+      refetchAllUsers();
+      refetchVerifications();
+      toast({ title: "Verification updated", description: `User @${data.username} is now ${data.status}.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update verification", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1395,14 +1413,27 @@ export default function Admin() {
                             {u.createdAt ? new Date(u.createdAt).toLocaleDateString() : "-"}
                           </td>
                           <td className="py-2 px-2">
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setPasswordResetUser({ id: u.id, username: u.username })}
-                              data-testid={`button-reset-password-${u.id}`}
-                            >
-                              <Key className="w-3 h-3 mr-1" /> Reset Password
-                            </Button>
+                            <div className="flex gap-1 flex-wrap">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setPasswordResetUser({ id: u.id, username: u.username })}
+                                data-testid={`button-reset-password-${u.id}`}
+                              >
+                                <Key className="w-3 h-3 mr-1" /> Password
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant={u.verificationStatus === "verified" ? "secondary" : "default"}
+                                onClick={() => {
+                                  setVerifyUser({ id: u.id, username: u.username, currentStatus: u.verificationStatus || "unverified" });
+                                  setNewVerificationStatus(u.verificationStatus || "unverified");
+                                }}
+                                data-testid={`button-verify-${u.id}`}
+                              >
+                                <UserCheck className="w-3 h-3 mr-1" /> Verify
+                              </Button>
+                            </div>
                           </td>
                         </tr>
                       ))}
@@ -1443,6 +1474,53 @@ export default function Admin() {
                             data-testid="button-confirm-reset"
                           >
                             {resetPassword.isPending ? "Resetting..." : "Reset Password"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Verification Status Dialog */}
+                {verifyUser && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setVerifyUser(null)}>
+                    <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                      <CardHeader>
+                        <CardTitle>Change Verification Status</CardTitle>
+                        <CardDescription>
+                          Update verification for @{verifyUser.username}
+                          <br />
+                          <span className="text-xs">Current status: <Badge variant="outline">{verifyUser.currentStatus}</Badge></span>
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label>New Verification Status</Label>
+                          <Select
+                            value={newVerificationStatus}
+                            onValueChange={setNewVerificationStatus}
+                          >
+                            <SelectTrigger data-testid="select-verification-status">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="verified">Verified</SelectItem>
+                              <SelectItem value="pending">Pending</SelectItem>
+                              <SelectItem value="unverified">Unverified</SelectItem>
+                              <SelectItem value="rejected">Rejected</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" onClick={() => setVerifyUser(null)} data-testid="button-cancel-verify">
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => updateVerification.mutate({ userId: verifyUser.id, status: newVerificationStatus })}
+                            disabled={newVerificationStatus === verifyUser.currentStatus || updateVerification.isPending}
+                            data-testid="button-confirm-verify"
+                          >
+                            {updateVerification.isPending ? "Updating..." : "Update Status"}
                           </Button>
                         </div>
                       </CardContent>

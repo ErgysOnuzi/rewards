@@ -2267,6 +2267,49 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Update user verification status
+  app.post("/api/admin/update-verification", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { userId, status } = req.body;
+      
+      if (!userId || !status) {
+        return res.status(400).json({ message: "userId and status are required" });
+      }
+      
+      if (!["unverified", "pending", "verified", "rejected"].includes(status)) {
+        return res.status(400).json({ message: "Invalid verification status" });
+      }
+      
+      // Find the user
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Update verification status
+      await db.update(users).set({
+        verificationStatus: status,
+        updatedAt: new Date(),
+      }).where(eq(users.id, userId));
+      
+      // Log the action
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: user.stakeUsername || user.username,
+        details: `Admin changed verification status for ${user.username} from ${user.verificationStatus} to ${status}`,
+      });
+      
+      console.log(`[Admin] Changed verification for ${user.username}: ${user.verificationStatus} -> ${status}`);
+      return res.json({ success: true, username: user.username, status });
+    } catch (err) {
+      console.error("Admin update verification error:", err);
+      return res.status(500).json({ message: "Failed to update verification status" });
+    }
+  });
+
   // Admin: Create user manually
   app.post("/api/admin/create-user", async (req: Request, res: Response) => {
     if (!await requireAdmin(req, res)) return;
