@@ -197,6 +197,28 @@ export const userState = pgTable("user_state", {
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
+// Wager overrides for testing (bypass Google Sheets data)
+export const wagerOverrides = pgTable("wager_overrides", {
+  id: serial("id").primaryKey(),
+  stakeId: text("stake_id").notNull().unique(),
+  lifetimeWagered: integer("lifetime_wagered"), // Lifetime wagered in dollars
+  yearToDateWagered: integer("year_to_date_wagered"), // 2026 wagered in dollars
+  note: text("note"), // Admin note for why override exists
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
+// Password reset tokens
+export const passwordResetTokens = pgTable("password_reset_tokens", {
+  id: serial("id").primaryKey(),
+  userId: text("user_id").notNull(), // References users.id
+  tokenHash: text("token_hash").notNull(), // SHA-256 hash of token
+  expiresAt: timestamp("expires_at").notNull(),
+  usedAt: timestamp("used_at"), // Set when token is consumed
+  requestIpHash: text("request_ip_hash"), // For security logging
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertDemoUserSchema = createInsertSchema(demoUsers).omit({ id: true });
 export const insertSpinLogSchema = createInsertSchema(spinLogs).omit({ id: true, timestamp: true });
 export const insertGuaranteedWinSchema = createInsertSchema(guaranteedWins).omit({ id: true });
@@ -210,6 +232,8 @@ export const insertFeatureToggleSchema = createInsertSchema(featureToggles).omit
 export const insertPayoutSchema = createInsertSchema(payouts).omit({ id: true, createdAt: true, processedAt: true });
 export const insertRateLimitLogSchema = createInsertSchema(rateLimitLogs).omit({ id: true, createdAt: true });
 export const insertUserStateSchema = createInsertSchema(userState).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertWagerOverrideSchema = createInsertSchema(wagerOverrides).omit({ id: true, createdAt: true, updatedAt: true });
+export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true, createdAt: true });
 
 export type DemoUser = typeof demoUsers.$inferSelect;
 export type InsertDemoUser = z.infer<typeof insertDemoUserSchema>;
@@ -226,6 +250,10 @@ export type FeatureToggle = typeof featureToggles.$inferSelect;
 export type Payout = typeof payouts.$inferSelect;
 export type RateLimitLog = typeof rateLimitLogs.$inferSelect;
 export type UserState = typeof userState.$inferSelect;
+export type WagerOverride = typeof wagerOverrides.$inferSelect;
+export type InsertWagerOverride = z.infer<typeof insertWagerOverrideSchema>;
+export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
+export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
 
 export const stakeIdSchema = z
   .string()
