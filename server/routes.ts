@@ -338,6 +338,14 @@ export async function registerRoutes(
       
       // Debug: Log response headers to verify Set-Cookie is present
       console.log("[Login] Response will be sent. Session ID:", req.session?.id?.substring(0, 8) + "...");
+      console.log("[Login] Cookie settings:", {
+        secure: req.session.cookie.secure,
+        sameSite: req.session.cookie.sameSite,
+        httpOnly: req.session.cookie.httpOnly,
+        maxAge: req.session.cookie.maxAge,
+        domain: req.session.cookie.domain,
+        path: req.session.cookie.path,
+      });
       
       logSecurityEvent({
         type: "auth_success",
