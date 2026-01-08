@@ -642,18 +642,21 @@ export async function registerRoutes(
 
       const domain = (loggedInUser.stakePlatform === "us" ? "us" : "com") as "us" | "com";
 
-      // Check for database override first (for testing)
+      // Check for database override first (for manually added users or testing)
       const override = await getWagerOverride(stakeId);
       
       let lifetimeWagered: number;
       let weightedWager: number;
       let periodLabel = "2026";
       
-      if (override && (override.lifetimeWagered !== null || override.yearToDateWagered !== null)) {
-        // Use override values (for testing)
+      // User exists if they have a database override OR are in any Google Sheet
+      const hasDbOverride = override !== null;
+      
+      if (hasDbOverride) {
+        // User exists in database - use override values (or 0 if not set)
         lifetimeWagered = override.lifetimeWagered ?? 0;
         weightedWager = override.yearToDateWagered ?? 0;
-        console.log(`[Lookup] Using override for ${stakeId}: lifetime=${lifetimeWagered}, ytd=${weightedWager}`);
+        console.log(`[Lookup] Using database override for ${stakeId}: lifetime=${lifetimeWagered}, ytd=${weightedWager}`);
       } else {
         // Fall back to Google Sheets data
         const wagerRow = await getWagerRow(stakeId);
