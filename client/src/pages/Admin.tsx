@@ -1371,7 +1371,7 @@ export default function Admin() {
                                 variant="destructive"
                                 onClick={() => {
                                   if (confirm(`Delete this user's account entirely? This cannot be undone.`)) {
-                                    deleteUser.mutate(String(v.id));
+                                    deleteUser.mutate(v.userId);
                                   }
                                 }}
                                 disabled={deleteUser.isPending}
