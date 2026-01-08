@@ -23,6 +23,7 @@ import { hashIp, maskUsername } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { encrypt, decrypt } from "./lib/encryption";
+import { generateToken } from "./lib/jwt";
 import { ZodError, z } from "zod";
 import { db } from "./db";
 import { eq, desc, sql, and, gte, lt } from "drizzle-orm";
@@ -257,8 +258,11 @@ export async function registerRoutes(
         details: "User registration successful",
       });
       
+      const token = generateToken({ userId: newUser.id, username: newUser.username });
+      
       return res.json({
         success: true,
+        token,
         user: {
           id: newUser.id,
           username: newUser.username,
@@ -354,8 +358,11 @@ export async function registerRoutes(
         details: "User login successful",
       });
       
+      const token = generateToken({ userId: user.id, username: user.username });
+      
       return res.json({
         success: true,
+        token,
         user: {
           id: user.id,
           username: user.username,
@@ -387,20 +394,20 @@ export async function registerRoutes(
     });
   });
   
-  // Get current session
+  // Get current session - uses centralized auth middleware for both cookies and tokens
   app.get("/api/auth/session", async (req: Request, res: Response) => {
-    // Debug logging for session issues
-    const sessionDebug = {
-      hasSession: !!req.session,
-      sessionId: req.session?.id?.substring(0, 8) + "...",
-      hasCookie: !!req.cookies?.["connect.sid"],
-      allCookies: Object.keys(req.cookies || {}),
-      userId: (req.session as any)?.userId,
-      cookieHeader: !!req.headers.cookie,
-    };
+    const userId = req.userId;
+    const authMethod = req.authMethod;
     
-    const userId = (req.session as any)?.userId;
     if (!userId) {
+      const sessionDebug = {
+        hasSession: !!req.session,
+        sessionId: req.session?.id?.substring(0, 8) + "...",
+        hasCookie: !!req.cookies?.["connect.sid"],
+        allCookies: Object.keys(req.cookies || {}),
+        hasAuthHeader: !!req.headers.authorization,
+        cookieHeader: !!req.headers.cookie,
+      };
       console.log("[Session Check] No userId found:", sessionDebug);
       return res.json({ user: null });
     }
@@ -413,9 +420,14 @@ export async function registerRoutes(
       
       // Check if user was deleted - invalidate session
       if (user.deletedAt) {
-        req.session.destroy(() => {});
+        if (authMethod === "session") {
+          req.session.destroy(() => {});
+        }
         return res.json({ user: null });
       }
+      
+      // If authenticated via token, issue a fresh token (sliding expiration)
+      const newToken = authMethod === "token" ? generateToken({ userId: user.id, username: user.username }) : undefined;
       
       return res.json({
         user: {
@@ -427,6 +439,7 @@ export async function registerRoutes(
           verificationStatus: user.verificationStatus,
           securityDisclaimerAccepted: user.securityDisclaimerAccepted,
         },
+        ...(newToken && { token: newToken }),
       });
     } catch (err) {
       console.error("Session check error:", err);
@@ -434,27 +447,26 @@ export async function registerRoutes(
     }
   });
   
-  // Helper middleware to get current user
+  // Helper middleware to get current user - uses centralized req.userId from auth middleware
   function getCurrentUser(req: Request): string | null {
-    return (req.session as any)?.userId || null;
+    return req.userId || null;
   }
   
   // =================== VERIFICATION WITH IMAGE UPLOAD ===================
   
   // Submit verification request with screenshot
   app.post("/api/verification/submit", upload.single("screenshot"), async (req: Request, res: Response) => {
-    // Debug: Log session state for troubleshooting
-    console.log("[Verification Submit] Session debug:", {
-      hasSession: !!req.session,
-      sessionId: req.session?.id,
-      userId: (req.session as any)?.userId,
-      cookies: Object.keys(req.cookies || {}),
+    // Debug: Log auth state for troubleshooting
+    console.log("[Verification Submit] Auth debug:", {
+      hasUserId: !!req.userId,
+      authMethod: req.authMethod,
       hasCookie: !!req.cookies?.["connect.sid"],
+      hasAuthHeader: !!req.headers.authorization,
     });
     
     const userId = getCurrentUser(req);
     if (!userId) {
-      console.log("[Verification Submit] Auth failed - no userId in session");
+      console.log("[Verification Submit] Auth failed - no userId");
       return res.status(401).json({ message: "Not authenticated" });
     }
     console.log("[Verification Submit] Auth success - userId:", userId);
@@ -640,14 +652,14 @@ export async function registerRoutes(
 
   app.post("/api/lookup", async (req: Request, res: Response) => {
     try {
-      // Require authentication
-      const sessionUserId = (req.session as any)?.userId;
-      if (!sessionUserId) {
+      // Require authentication (uses centralized auth middleware)
+      const userId = req.userId;
+      if (!userId) {
         return res.status(401).json({ message: "Please log in to view your tickets." } as ErrorResponse);
       }
 
       // Get logged-in user
-      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, userId));
       if (!loggedInUser) {
         return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
       }
@@ -746,14 +758,14 @@ export async function registerRoutes(
 
   app.post("/api/spin", async (req: Request, res: Response) => {
     try {
-      // Require login before spinning
-      const sessionUserId = (req.session as any)?.userId;
-      if (!sessionUserId) {
+      // Require login before spinning (uses centralized auth middleware)
+      const userId = req.userId;
+      if (!userId) {
         return res.status(401).json({ message: "Please log in to spin." } as ErrorResponse);
       }
 
       // Get the logged-in user
-      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, userId));
       if (!loggedInUser) {
         return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
       }
@@ -887,14 +899,14 @@ export async function registerRoutes(
   // Daily bonus spin endpoint (one free spin per 24 hours)
   app.post("/api/spin/bonus", async (req: Request, res: Response) => {
     try {
-      // SECURITY: Require authentication
-      const sessionUserId = (req.session as any)?.userId;
-      if (!sessionUserId) {
+      // SECURITY: Require authentication (uses centralized auth middleware)
+      const userId = req.userId;
+      if (!userId) {
         return res.status(401).json({ message: "Please log in to claim bonus." } as ErrorResponse);
       }
 
       // Get the logged-in user
-      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, userId));
       if (!loggedInUser) {
         return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
       }
@@ -1045,14 +1057,14 @@ export async function registerRoutes(
   // Check bonus spin availability
   app.post("/api/spin/bonus/check", async (req: Request, res: Response) => {
     try {
-      // SECURITY: Require authentication
-      const sessionUserId = (req.session as any)?.userId;
-      if (!sessionUserId) {
+      // SECURITY: Require authentication (uses centralized auth middleware)
+      const userId = req.userId;
+      if (!userId) {
         return res.status(401).json({ message: "Please log in to check bonus status." } as ErrorResponse);
       }
 
       // Get the logged-in user
-      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, userId));
       if (!loggedInUser) {
         return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
       }
@@ -1120,14 +1132,14 @@ export async function registerRoutes(
   // Request withdrawal to Stake account - REQUIRES AUTHENTICATION
   app.post("/api/wallet/withdraw", async (req: Request, res: Response) => {
     try {
-      // SECURITY: Require authentication
-      const sessionUserId = (req.session as any)?.userId;
-      if (!sessionUserId) {
+      // SECURITY: Require authentication (uses centralized auth middleware)
+      const userId = req.userId;
+      if (!userId) {
         return res.status(401).json({ message: "Authentication required" } as ErrorResponse);
       }
 
       // Get logged-in user
-      const [loggedInUser] = await db.select().from(users).where(eq(users.id, sessionUserId));
+      const [loggedInUser] = await db.select().from(users).where(eq(users.id, userId));
       if (!loggedInUser) {
         return res.status(401).json({ message: "Session invalid. Please log in again." } as ErrorResponse);
       }

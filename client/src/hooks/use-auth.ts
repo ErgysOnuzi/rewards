@@ -1,22 +1,38 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import type { User } from "@shared/models/auth";
-import { apiRequest } from "@/lib/queryClient";
+import { apiRequest, setAuthToken, clearAuthToken, getAuthToken } from "@/lib/queryClient";
 
 interface AuthResponse {
   success: boolean;
   user: User;
+  token?: string;
+}
+
+interface SessionResponse {
+  user: User | null;
+  token?: string;
 }
 
 async function fetchSession(): Promise<User | null> {
+  const headers: HeadersInit = {
+    ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
+  };
+
   const response = await fetch("/api/auth/session", {
     credentials: "include",
+    headers,
   });
 
   if (!response.ok) {
     return null;
   }
 
-  const data = await response.json();
+  const data: SessionResponse = await response.json();
+  
+  if (data.token) {
+    setAuthToken(data.token);
+  }
+  
   return data.user || null;
 }
 
@@ -39,8 +55,8 @@ export function useAuth() {
     queryKey: ["/api/auth/session"],
     queryFn: fetchSession,
     retry: false,
-    staleTime: 1000 * 60, // 1 minute - shorter to catch session expiry faster
-    refetchOnWindowFocus: true, // Revalidate when user returns to tab
+    staleTime: 1000 * 60,
+    refetchOnWindowFocus: true,
   });
 
   const loginMutation = useMutation({
@@ -49,6 +65,9 @@ export function useAuth() {
       return res.json();
     },
     onSuccess: (data) => {
+      if (data.token) {
+        setAuthToken(data.token);
+      }
       queryClient.setQueryData(["/api/auth/session"], data.user);
     },
   });
@@ -59,6 +78,9 @@ export function useAuth() {
       return res.json();
     },
     onSuccess: (data) => {
+      if (data.token) {
+        setAuthToken(data.token);
+      }
       queryClient.setQueryData(["/api/auth/session"], data.user);
     },
   });
@@ -68,6 +90,7 @@ export function useAuth() {
       await apiRequest("POST", "/api/auth/logout", {});
     },
     onSuccess: () => {
+      clearAuthToken();
       queryClient.setQueryData(["/api/auth/session"], null);
     },
   });

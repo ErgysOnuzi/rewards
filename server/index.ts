@@ -9,6 +9,7 @@ import { startBackgroundRefresh } from "./lib/sheets";
 import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/security";
 import { enforceSecurityRequirements } from "./lib/config";
 import { pool } from "./db";
+import { verifyToken } from "./lib/jwt";
 
 // Validate security requirements at startup - fail hard if missing
 enforceSecurityRequirements();
@@ -76,6 +77,40 @@ app.use(
 
 // CSRF protection for state-changing requests
 app.use(csrfProtection);
+
+// Auth resolution middleware - populates req.userId from session or JWT
+// This enables both cookie-based and token-based auth for iframe contexts
+declare global {
+  namespace Express {
+    interface Request {
+      userId?: string;
+      authMethod?: "session" | "token";
+    }
+  }
+}
+
+app.use((req, _res, next) => {
+  // First try session
+  const sessionUserId = (req.session as any)?.userId;
+  if (sessionUserId) {
+    req.userId = sessionUserId;
+    req.authMethod = "session";
+    return next();
+  }
+  
+  // Try Bearer token (for iframe contexts where cookies don't work)
+  const authHeader = req.headers.authorization;
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.substring(7);
+    const payload = verifyToken(token);
+    if (payload) {
+      req.userId = payload.userId;
+      req.authMethod = "token";
+    }
+  }
+  
+  next();
+});
 
 // Request body size limits to prevent DoS attacks
 const JSON_LIMIT = "100kb"; // Reasonable limit for API requests
