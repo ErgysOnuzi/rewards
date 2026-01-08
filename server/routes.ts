@@ -6,7 +6,7 @@ import {
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
   userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
-  wagerOverrides, passwordResetTokens,
+  wagerOverrides, passwordResetTokens, sessions,
   CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances,
   users, verificationRequests, registerSchema, loginSchema
 } from "@shared/schema";
@@ -293,6 +293,17 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
+      // Check if user is deleted
+      if (user.deletedAt) {
+        logSecurityEvent({
+          type: "auth_failure",
+          ipHash: hashForLogging(getClientIpForSecurity(req)),
+          stakeId: username,
+          details: "Login failed - account deleted",
+        });
+        return res.status(401).json({ message: "This account has been deleted" });
+      }
+      
       // Verify password
       const validPassword = await bcrypt.compare(password, user.passwordHash);
       if (!validPassword) {
@@ -389,6 +400,12 @@ export async function registerRoutes(
     try {
       const [user] = await db.select().from(users).where(eq(users.id, userId));
       if (!user) {
+        return res.json({ user: null });
+      }
+      
+      // Check if user was deleted - invalidate session
+      if (user.deletedAt) {
+        req.session.destroy(() => {});
         return res.json({ user: null });
       }
       
@@ -1746,6 +1763,15 @@ export async function registerRoutes(
     const [flagData] = await db.select().from(userFlags).where(eq(userFlags.stakeId, stakeId));
     const transactions = await db.select().from(walletTransactions).where(eq(walletTransactions.stakeId, stakeId)).orderBy(desc(walletTransactions.createdAt)).limit(20);
     
+    // Get registered user account if exists
+    const [registeredUser] = await db.select({
+      id: users.id,
+      username: users.username,
+      verificationStatus: users.verificationStatus,
+      createdAt: users.createdAt,
+      deletedAt: users.deletedAt,
+    }).from(users).where(eq(users.stakeUsername, stakeId));
+    
     const winCount = spins.filter(s => s.result === "WIN").length;
     const lastSpin = spins[0];
 
@@ -1767,6 +1793,13 @@ export async function registerRoutes(
       },
       flags: flagData || null,
       recentTransactions: transactions,
+      registeredUser: registeredUser ? {
+        id: registeredUser.id,
+        username: registeredUser.username,
+        verificationStatus: registeredUser.verificationStatus,
+        createdAt: registeredUser.createdAt,
+        isDeleted: registeredUser.deletedAt !== null,
+      } : null,
     });
   });
 
@@ -2565,6 +2598,80 @@ export async function registerRoutes(
     } catch (err) {
       console.error("Admin create user error:", err);
       return res.status(500).json({ message: "Failed to create user" });
+    }
+  });
+
+  // Admin: Delete user (soft delete)
+  app.delete("/api/admin/users/:userId", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { userId } = req.params;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      
+      // Find the user
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if already deleted
+      if (user.deletedAt) {
+        return res.status(400).json({ message: "User already deleted" });
+      }
+      
+      const stakeId = user.stakeUsername?.toLowerCase();
+      
+      // Soft delete - set deletedAt timestamp
+      await db.update(users).set({
+        deletedAt: new Date(),
+        updatedAt: new Date(),
+      }).where(eq(users.id, userId));
+      
+      // Revoke all user sessions
+      await db.delete(sessions).where(
+        sql`sess->>'userId' = ${userId}`
+      );
+      
+      // Clean up wallet balance (set to 0)
+      if (stakeId) {
+        await db.update(userWallets).set({
+          balance: 0,
+          updatedAt: new Date(),
+        }).where(eq(userWallets.stakeId, stakeId));
+        
+        // Clear spin balances
+        await db.delete(userSpinBalances).where(eq(userSpinBalances.stakeId, stakeId));
+        
+        // Cancel any pending withdrawals
+        await db.update(withdrawalRequests).set({
+          status: "rejected",
+          adminNotes: "User account deleted",
+          processedAt: new Date(),
+        }).where(
+          and(
+            eq(withdrawalRequests.stakeId, stakeId),
+            eq(withdrawalRequests.status, "pending")
+          )
+        );
+      }
+      
+      // Log the action
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: user.stakeUsername || user.username,
+        details: `Admin deleted user account: ${user.username} (stake: ${user.stakeUsername || 'N/A'})`,
+      });
+      
+      console.log(`[Admin] Deleted user ${user.username} (stake: ${user.stakeUsername || 'N/A'})`);
+      return res.json({ success: true, username: user.username });
+    } catch (err) {
+      console.error("Admin delete user error:", err);
+      return res.status(500).json({ message: "Failed to delete user" });
     }
   });
 

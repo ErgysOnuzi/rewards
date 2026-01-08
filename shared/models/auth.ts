@@ -28,6 +28,8 @@ export const users = pgTable("users", {
   verificationStatus: varchar("verification_status").default("unverified"), // "unverified", "pending", "verified", "rejected"
   verifiedAt: timestamp("verified_at"),
   securityDisclaimerAccepted: boolean("security_disclaimer_accepted").default(false),
+  // Soft delete field - when set, user is considered deleted
+  deletedAt: timestamp("deleted_at"),
 });
 
 export type UpsertUser = typeof users.$inferInsert;

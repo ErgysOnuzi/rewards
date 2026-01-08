@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban, 
   Search, Shield, AlertTriangle, Settings, Download, Database,
-  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key, UserPlus
+  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key, UserPlus, Trash2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -106,6 +106,13 @@ interface UserLookup {
   };
   flags: UserFlag | null;
   recentTransactions: { type: string; amount: number; description: string; createdAt: string }[];
+  registeredUser: {
+    id: string;
+    username: string;
+    verificationStatus: string | null;
+    createdAt: string;
+    isDeleted: boolean;
+  } | null;
 }
 
 interface FeatureToggles {
@@ -392,6 +399,7 @@ export default function Admin() {
   });
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const resetData = useMutation({
     mutationFn: async () => {
       const res = await fetch("/api/admin/reset-data", { 
@@ -525,6 +533,20 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to update toggle", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const deleteUser = useMutation({
+    mutationFn: async (userId: string) => {
+      return apiRequest("DELETE", `/api/admin/users/${userId}`);
+    },
+    onSuccess: (data: any) => {
+      setLookupResult(null);
+      setShowDeleteConfirm(false);
+      toast({ title: "User deleted", description: `Account @${data.username} has been deleted.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to delete user", description: err.message, variant: "destructive" });
     },
   });
 
@@ -913,6 +935,57 @@ export default function Admin() {
                             {lookupResult.flags.isAllowlisted && <Badge variant="default">Allowlisted</Badge>}
                             {lookupResult.flags.isDisputed && <Badge variant="secondary">Disputed</Badge>}
                             {lookupResult.flags.notes && <span className="text-sm text-muted-foreground">Notes: {lookupResult.flags.notes}</span>}
+                          </div>
+                        )}
+                        
+                        {lookupResult.registeredUser && (
+                          <div className="mt-4 p-3 border rounded-md bg-muted/30">
+                            <h4 className="font-medium mb-2">Registered Account</h4>
+                            <div className="grid md:grid-cols-2 gap-2 text-sm">
+                              <div><span className="text-muted-foreground">Username:</span> @{lookupResult.registeredUser.username}</div>
+                              <div><span className="text-muted-foreground">Status:</span> {lookupResult.registeredUser.verificationStatus}</div>
+                              <div><span className="text-muted-foreground">Created:</span> {formatDate(lookupResult.registeredUser.createdAt)}</div>
+                              {lookupResult.registeredUser.isDeleted && (
+                                <Badge variant="destructive">Account Deleted</Badge>
+                              )}
+                            </div>
+                            {!lookupResult.registeredUser.isDeleted && (
+                              <div className="mt-3">
+                                {!showDeleteConfirm ? (
+                                  <Button 
+                                    variant="destructive" 
+                                    size="sm"
+                                    onClick={() => setShowDeleteConfirm(true)}
+                                    data-testid="button-delete-user"
+                                  >
+                                    <Trash2 className="w-4 h-4 mr-2" /> Delete Account
+                                  </Button>
+                                ) : (
+                                  <div className="flex flex-col gap-2">
+                                    <p className="text-sm text-destructive font-medium">Are you sure? This will delete the user account, clear their wallet, and cancel pending withdrawals.</p>
+                                    <div className="flex gap-2">
+                                      <Button 
+                                        variant="destructive" 
+                                        size="sm"
+                                        onClick={() => deleteUser.mutate(lookupResult.registeredUser!.id)}
+                                        disabled={deleteUser.isPending}
+                                        data-testid="button-confirm-delete-user"
+                                      >
+                                        {deleteUser.isPending ? "Deleting..." : "Yes, Delete"}
+                                      </Button>
+                                      <Button 
+                                        variant="outline" 
+                                        size="sm"
+                                        onClick={() => setShowDeleteConfirm(false)}
+                                        data-testid="button-cancel-delete-user"
+                                      >
+                                        Cancel
+                                      </Button>
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </div>
                         )}
                       </>
