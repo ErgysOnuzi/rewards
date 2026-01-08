@@ -543,6 +543,10 @@ export default function Admin() {
     onSuccess: (data: any) => {
       setLookupResult(null);
       setShowDeleteConfirm(false);
+      // Invalidate user-related queries to refresh the lists
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/verification-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/verifications"] });
       toast({ title: "User deleted", description: `Account @${data.username} has been deleted.` });
     },
     onError: (err: Error) => {

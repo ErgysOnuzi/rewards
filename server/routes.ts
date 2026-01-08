@@ -2671,7 +2671,8 @@ export async function registerRoutes(
       return res.json({ success: true, username: user.username });
     } catch (err) {
       console.error("Admin delete user error:", err);
-      return res.status(500).json({ message: "Failed to delete user" });
+      console.error("Delete user params:", { userId: req.params.userId });
+      return res.status(500).json({ message: "Failed to delete user", error: err instanceof Error ? err.message : "Unknown error" });
     }
   });
 
