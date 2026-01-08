@@ -18,7 +18,7 @@ import type {
   LookupResponse, SpinResponse, ErrorResponse,
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
-import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus, getWeightedWagerWithDomain } from "./lib/sheets";
+import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus, getWeightedWagerWithDomain, usernameExistsInSpreadsheet } from "./lib/sheets";
 import { hashIp } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
@@ -657,18 +657,23 @@ export async function registerRoutes(
       } else {
         // Fall back to Google Sheets data
         const wagerRow = await getWagerRow(stakeId);
-        if (!wagerRow) {
-          return res.status(404).json({ message: "Your Stake ID was not found in our records." } as ErrorResponse);
+        
+        // Weighted sheets = 2026 wagers (for ticket calculation)
+        // Check both weighted sheets since users might only exist in one
+        weightedWager = getWeightedWager(stakeId, domain);
+        
+        // User must exist in either NGR sheet OR weighted sheets
+        if (!wagerRow && weightedWager === 0) {
+          // Also check if username exists in weighted sheets with 0 wager
+          const existsInWeighted = usernameExistsInSpreadsheet(stakeId, domain);
+          if (!existsInWeighted) {
+            return res.status(404).json({ message: "Your Stake ID was not found in our records." } as ErrorResponse);
+          }
         }
         
         // NGR sheet = lifetime wagered (for display only)
-        lifetimeWagered = wagerRow.wageredAmount;
-        periodLabel = wagerRow.periodLabel || "2026";
-        
-        // Weighted sheets = 2026 wagers (for ticket calculation)
-        // NO FALLBACK: tickets come ONLY from weighted 2026 sheets
-        // If weighted sheets are empty (still 2025), users have 0 tickets
-        weightedWager = getWeightedWager(stakeId, domain);
+        lifetimeWagered = wagerRow?.wageredAmount ?? 0;
+        periodLabel = wagerRow?.periodLabel || "2026";
       }
       
       const ticketsTotal = calculateTickets(weightedWager);
