@@ -47,7 +47,7 @@ app.use(
     saveUninitialized: false,
     rolling: true, // Reset session expiry on each request (activity)
     cookie: {
-      secure: process.env.NODE_ENV === "production",
+      secure: "auto", // Auto-detect HTTPS via X-Forwarded-Proto header from proxy
       httpOnly: true,
       maxAge: SESSION_TIMEOUT, // 20 minutes of inactivity
       sameSite: "lax",
