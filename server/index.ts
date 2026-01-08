@@ -35,6 +35,21 @@ app.use(cookieParser());
 // Sessions expire after 20 minutes of inactivity (rolling resets on each request)
 const SESSION_TIMEOUT = 20 * 60 * 1000; // 20 minutes in milliseconds
 const PgSession = connectPgSimple(session);
+
+// Determine if running in production/HTTPS context
+// Replit always uses HTTPS via proxy, so detect production mode
+const isProduction = process.env.NODE_ENV === "production";
+const isReplitEnv = !!process.env.REPLIT_DOMAINS;
+const isSecure = isProduction || isReplitEnv;
+
+console.log("[Session Config]", {
+  isProduction,
+  isReplitEnv,
+  isSecure,
+  NODE_ENV: process.env.NODE_ENV,
+  REPLIT_DOMAINS: process.env.REPLIT_DOMAINS?.substring(0, 30) + "...",
+});
+
 app.use(
   session({
     store: new PgSession({
@@ -47,10 +62,14 @@ app.use(
     saveUninitialized: false,
     rolling: true, // Reset session expiry on each request (activity)
     cookie: {
-      secure: "auto", // Auto-detect HTTPS via X-Forwarded-Proto header from proxy
+      // Use secure cookies in production/Replit (HTTPS environment)
+      // sameSite: "none" is required for cross-site iframe usage but requires secure: true
+      secure: isSecure,
       httpOnly: true,
       maxAge: SESSION_TIMEOUT, // 20 minutes of inactivity
-      sameSite: "lax",
+      // "none" allows cross-site cookies (for iframe embedding)
+      // "lax" is safer but doesn't work in iframes
+      sameSite: isSecure ? "none" : "lax",
     },
   })
 );
