@@ -58,6 +58,11 @@ export default function Verify() {
       const response = await fetch("/api/verification/status", {
         credentials: "include",
       });
+      if (response.status === 401) {
+        // Session expired - redirect to login
+        setLocation("/login");
+        return;
+      }
       if (response.ok) {
         const data = await response.json();
         setVerificationStatus(data);
@@ -78,6 +83,16 @@ export default function Verify() {
         method: "POST",
         credentials: "include",
       });
+      if (response.status === 401) {
+        // Session expired - redirect to login
+        toast({
+          title: "Session Expired",
+          description: "Please log in again to continue.",
+          variant: "destructive",
+        });
+        setLocation("/login");
+        return;
+      }
       if (response.ok) {
         setShowDisclaimer(false);
         setVerificationStatus(prev => prev ? { ...prev, security_disclaimer_accepted: true } : null);
@@ -159,6 +174,16 @@ export default function Verify() {
       const data = await response.json();
 
       if (!response.ok) {
+        // Handle session expiry - redirect to login
+        if (response.status === 401) {
+          toast({
+            title: "Session Expired",
+            description: "Please log in again to continue.",
+            variant: "destructive",
+          });
+          setLocation("/login");
+          return;
+        }
         throw new Error(data.message || "Failed to submit verification");
       }
 

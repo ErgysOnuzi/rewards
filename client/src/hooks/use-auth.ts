@@ -39,7 +39,8 @@ export function useAuth() {
     queryKey: ["/api/auth/session"],
     queryFn: fetchSession,
     retry: false,
-    staleTime: 1000 * 60 * 5, // 5 minutes
+    staleTime: 1000 * 60, // 1 minute - shorter to catch session expiry faster
+    refetchOnWindowFocus: true, // Revalidate when user returns to tab
   });
 
   const loginMutation = useMutation({

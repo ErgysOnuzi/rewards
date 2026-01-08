@@ -315,11 +315,18 @@ export async function registerRoutes(
             console.error("[Login] Session save error:", err);
             reject(err);
           } else {
-            console.log("[Login] Session saved successfully for user:", user.id);
+            console.log("[Login] Session saved successfully:", {
+              userId: user.id,
+              sessionId: req.session.id?.substring(0, 8) + "...",
+              sessionStore: typeof req.session.save,
+            });
             resolve();
           }
         });
       });
+      
+      // Debug: Log response headers to verify Set-Cookie is present
+      console.log("[Login] Response will be sent. Session ID:", req.session?.id?.substring(0, 8) + "...");
       
       logSecurityEvent({
         type: "auth_success",
@@ -368,7 +375,9 @@ export async function registerRoutes(
       hasSession: !!req.session,
       sessionId: req.session?.id?.substring(0, 8) + "...",
       hasCookie: !!req.cookies?.["connect.sid"],
+      allCookies: Object.keys(req.cookies || {}),
       userId: (req.session as any)?.userId,
+      cookieHeader: !!req.headers.cookie,
     };
     
     const userId = (req.session as any)?.userId;
