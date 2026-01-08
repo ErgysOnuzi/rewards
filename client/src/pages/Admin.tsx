@@ -55,14 +55,14 @@ interface UserFlag {
 }
 
 interface WeightedSheetStatus {
-  sheetId: string;
+  configured: boolean;
   tabName: string;
   loaded: boolean;
   rowCount: number;
 }
 
 interface DataStatus {
-  sheetId: string;
+  sheetConfigured: boolean;
   tabName: string;
   loaded: boolean;
   rowCount: number;
@@ -741,7 +741,7 @@ export default function Admin() {
               </CardHeader>
               <CardContent className="grid md:grid-cols-2 gap-4 text-sm">
                 <div className="space-y-2">
-                  <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus?.sheetId}</span></div>
+                  <div className="flex items-center gap-2 flex-wrap"><span className="text-muted-foreground">Sheet:</span> <Badge variant={dataStatus?.sheetConfigured ? "default" : "destructive"}>{dataStatus?.sheetConfigured ? "Configured" : "Not Configured"}</Badge></div>
                   <div><span className="text-muted-foreground">Tab:</span> {dataStatus?.tabName}</div>
                   <div><span className="text-muted-foreground">Rows Loaded:</span> {dataStatus?.rowCount ?? 0}</div>
                   <div><span className="text-muted-foreground">Cache TTL:</span> {dataStatus?.cacheTtlMs ? `${dataStatus.cacheTtlMs / 1000}s` : "N/A"}</div>
@@ -781,7 +781,7 @@ export default function Admin() {
                     <p className="text-xs text-muted-foreground">Used to calculate tickets for Stake.us users</p>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus.weightedSheets.us.sheetId}</span></div>
+                    <div className="flex items-center gap-2 flex-wrap"><span className="text-muted-foreground">Sheet:</span> <Badge variant={dataStatus.weightedSheets.us.configured ? "default" : "destructive"}>{dataStatus.weightedSheets.us.configured ? "Configured" : "Not Configured"}</Badge></div>
                     <div><span className="text-muted-foreground">Tab:</span> {dataStatus.weightedSheets.us.tabName}</div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-muted-foreground">Status:</span>
@@ -808,7 +808,7 @@ export default function Admin() {
                     <p className="text-xs text-muted-foreground">Used to calculate tickets for Stake.com users</p>
                   </CardHeader>
                   <CardContent className="space-y-2 text-sm">
-                    <div><span className="text-muted-foreground">Sheet ID:</span> <span className="break-all">{dataStatus.weightedSheets.com.sheetId}</span></div>
+                    <div className="flex items-center gap-2 flex-wrap"><span className="text-muted-foreground">Sheet:</span> <Badge variant={dataStatus.weightedSheets.com.configured ? "default" : "destructive"}>{dataStatus.weightedSheets.com.configured ? "Configured" : "Not Configured"}</Badge></div>
                     <div><span className="text-muted-foreground">Tab:</span> {dataStatus.weightedSheets.com.tabName}</div>
                     <div className="flex items-center gap-2 flex-wrap">
                       <span className="text-muted-foreground">Status:</span>

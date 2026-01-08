@@ -19,7 +19,7 @@ import type {
   ConvertSpinsResponse, PurchaseSpinsResponse, WithdrawResponse
 } from "@shared/schema";
 import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus, getWeightedWagerWithDomain, usernameExistsInSpreadsheet } from "./lib/sheets";
-import { hashIp } from "./lib/hash";
+import { hashIp, maskUsername } from "./lib/hash";
 import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { encrypt, decrypt } from "./lib/encryption";
@@ -1494,21 +1494,20 @@ export async function registerRoutes(
     }
 
     return res.json({
-      sheetId: config.googleSheetsId ? `...${config.googleSheetsId.slice(-8)}` : "Not configured",
+      sheetConfigured: !!config.googleSheetsId,
       tabName: config.wagerSheetName,
       ...cacheStatus,
       duplicateCount: duplicates.length,
       duplicates: duplicates.slice(0, 20),
-      // Weighted sheets status
       weightedSheets: {
         us: {
-          sheetId: config.weightedSheetsUs ? `...${config.weightedSheetsUs.slice(-8)}` : "Not configured",
+          configured: !!config.weightedSheetsUs,
           tabName: config.weightedSheetName,
           loaded: weightedStatus.usLoaded,
           rowCount: weightedStatus.usRowCount,
         },
         com: {
-          sheetId: config.weightedSheetsCom ? `...${config.weightedSheetsCom.slice(-8)}` : "Not configured",
+          configured: !!config.weightedSheetsCom,
           tabName: config.weightedSheetName,
           loaded: weightedStatus.comLoaded,
           rowCount: weightedStatus.comRowCount,
@@ -2043,11 +2042,9 @@ export async function registerRoutes(
         });
       }
       
-      // Top 10 by tickets
       const sorted = [...entries].filter(e => e.status === "ok").sort((a, b) => b.tickets - a.tickets);
       const top10 = sorted.slice(0, 10);
       
-      // Stats
       const minWager = wagers.length ? Math.min(...wagers) : 0;
       const maxWager = wagers.length ? Math.max(...wagers) : 0;
       const avgWager = wagers.length ? wagers.reduce((a, b) => a + b, 0) / wagers.length : 0;
