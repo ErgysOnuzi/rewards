@@ -239,6 +239,7 @@ export default function Admin() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [lookupId, setLookupId] = useState("");
   const [lookupResult, setLookupResult] = useState<UserLookup | null>(null);
+  const [lookupLoading, setLookupLoading] = useState(false);
   const [newFlag, setNewFlag] = useState({ stakeId: "", isBlacklisted: false, isAllowlisted: false, isDisputed: false, notes: "" });
   const [exportParams, setExportParams] = useState({ campaign: "", weekLabel: "", ticketUnit: 1000, wagerField: "Wagered_Weekly" });
   const [exportPreview, setExportPreview] = useState<any>(null);
@@ -423,9 +424,21 @@ export default function Admin() {
 
   const userLookup = async () => {
     if (!lookupId.trim()) return;
-    const res = await fetch(`/api/admin/user-lookup/${encodeURIComponent(lookupId)}`, { credentials: "include" });
-    const data = await res.json();
-    setLookupResult(data);
+    setLookupLoading(true);
+    setLookupResult(null);
+    try {
+      const res = await fetch(`/api/admin/user-lookup/${encodeURIComponent(lookupId)}`, { credentials: "include" });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Lookup failed", description: data.message || "Unknown error", variant: "destructive" });
+        return;
+      }
+      setLookupResult(data);
+    } catch (err) {
+      toast({ title: "Lookup failed", description: err instanceof Error ? err.message : "Network error", variant: "destructive" });
+    } finally {
+      setLookupLoading(false);
+    }
   };
 
   const saveFlag = useMutation({
@@ -896,8 +909,9 @@ export default function Admin() {
                     className="flex-1"
                     data-testid="input-lookup-id"
                   />
-                  <Button onClick={userLookup} className="shrink-0" data-testid="button-lookup">
-                    <Search className="w-4 h-4 mr-2" /> Lookup
+                  <Button onClick={userLookup} className="shrink-0" disabled={lookupLoading || !lookupId.trim()} data-testid="button-lookup">
+                    {lookupLoading ? <RotateCw className="w-4 h-4 mr-2 animate-spin" /> : <Search className="w-4 h-4 mr-2" />}
+                    {lookupLoading ? "Loading..." : "Lookup"}
                   </Button>
                 </div>
 
