@@ -84,6 +84,8 @@ Expected payout is equal across all tiers (house never loses on tier upgrades)
   - IP-based rate limiting (configurable, default 30 requests/hour)
   - IP hashing for privacy in logs
   - Request ID tracking for spin audit trail
+  - Google Sheet IDs hidden from API responses (only shows "configured" status)
+  - `maskUsername()` utility available for masking player names (first 2 + last 2 chars)
 
 ### Data Flow
 1. User enters Stake ID → POST `/api/lookup` → Returns ticket balance, wallet, spin balances
