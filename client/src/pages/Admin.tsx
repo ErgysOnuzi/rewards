@@ -1346,7 +1346,7 @@ export default function Admin() {
                             <div className="text-xs text-muted-foreground">
                               Submitted: {new Date(v.createdAt).toLocaleString()}
                             </div>
-                            <div className="flex gap-2 mt-3">
+                            <div className="flex gap-2 mt-3 flex-wrap">
                               <Button
                                 size="sm"
                                 onClick={() => processVerification.mutate({ id: v.id, status: "approved" })}
@@ -1358,13 +1358,27 @@ export default function Admin() {
                               </Button>
                               <Button
                                 size="sm"
-                                variant="destructive"
+                                variant="secondary"
                                 onClick={() => processVerification.mutate({ id: v.id, status: "rejected" })}
                                 disabled={processVerification.isPending}
                                 data-testid={`button-reject-verification-${v.id}`}
                               >
                                 <Ban className="w-4 h-4 mr-1" />
                                 Reject
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  if (confirm(`Delete this user's account entirely? This cannot be undone.`)) {
+                                    deleteUser.mutate(String(v.id));
+                                  }
+                                }}
+                                disabled={deleteUser.isPending}
+                                data-testid={`button-delete-pending-${v.id}`}
+                              >
+                                <Trash2 className="w-4 h-4 mr-1" />
+                                Delete Account
                               </Button>
                             </div>
                           </div>
@@ -1403,12 +1417,28 @@ export default function Admin() {
                   ) : (
                     <div className="space-y-2">
                       {verificationQueuesData.unverified.slice(0, 20).map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-2 rounded-md bg-muted/30">
-                          <div>
+                        <div key={u.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/30">
+                          <div className="flex-1 min-w-0">
                             <span className="font-medium text-sm">@{u.username}</span>
                             {u.email && <span className="text-xs text-muted-foreground ml-2">{u.email}</span>}
                           </div>
-                          <Badge variant="outline" className="text-xs">Unverified</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="outline" className="text-xs">Unverified</Badge>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => {
+                                if (confirm(`Delete user @${u.username}? This cannot be undone.`)) {
+                                  deleteUser.mutate(String(u.id));
+                                }
+                              }}
+                              disabled={deleteUser.isPending}
+                              data-testid={`button-delete-unverified-${u.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                       {verificationQueuesData.unverified.length > 20 && (
@@ -1435,14 +1465,30 @@ export default function Admin() {
                   ) : (
                     <div className="space-y-2">
                       {verificationQueuesData.verified.slice(0, 20).map((u) => (
-                        <div key={u.id} className="flex items-center justify-between p-2 rounded-md bg-green-500/5">
-                          <div>
+                        <div key={u.id} className="flex items-center justify-between gap-2 p-2 rounded-md bg-green-500/5">
+                          <div className="flex-1 min-w-0">
                             <span className="font-medium text-sm">@{u.username}</span>
                             <span className="text-xs text-muted-foreground ml-2">
                               {u.stakeUsername} ({u.stakePlatform?.toUpperCase()})
                             </span>
                           </div>
-                          <Badge variant="default" className="text-xs bg-green-600">Verified</Badge>
+                          <div className="flex items-center gap-2">
+                            <Badge variant="default" className="text-xs bg-green-600">Verified</Badge>
+                            <Button
+                              size="icon"
+                              variant="ghost"
+                              className="text-destructive"
+                              onClick={() => {
+                                if (confirm(`Delete user @${u.username}? This cannot be undone.`)) {
+                                  deleteUser.mutate(String(u.id));
+                                }
+                              }}
+                              disabled={deleteUser.isPending}
+                              data-testid={`button-delete-verified-${u.id}`}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          </div>
                         </div>
                       ))}
                       {verificationQueuesData.verified.length > 20 && (
@@ -1541,6 +1587,19 @@ export default function Admin() {
                                   <Activity className="w-3 h-3 mr-1" /> Wager
                                 </Button>
                               )}
+                              <Button
+                                size="sm"
+                                variant="destructive"
+                                onClick={() => {
+                                  if (confirm(`Delete user @${u.username}? This will remove their account, wallet, and cancel pending withdrawals.`)) {
+                                    deleteUser.mutate(String(u.id));
+                                  }
+                                }}
+                                disabled={deleteUser.isPending}
+                                data-testid={`button-delete-user-${u.id}`}
+                              >
+                                <Trash2 className="w-3 h-3 mr-1" /> Delete
+                              </Button>
                             </div>
                           </td>
                         </tr>
