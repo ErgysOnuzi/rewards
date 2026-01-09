@@ -175,16 +175,17 @@ interface VerificationQueuesData {
 }
 
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const { toast } = useToast();
 
   const loginMutation = useMutation({
-    mutationFn: async (password: string) => {
+    mutationFn: async ({ username, password }: { username: string; password: string }) => {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ username, password }),
         credentials: "include",
       });
       if (!res.ok) {
@@ -208,10 +209,21 @@ function AdminLogin({ onLogin }: { onLogin: () => void }) {
         <CardHeader className="text-center">
           <Lock className="w-12 h-12 mx-auto text-muted-foreground mb-2" />
           <CardTitle>Admin Access</CardTitle>
-          <CardDescription>Enter the admin password to continue</CardDescription>
+          <CardDescription>Enter your admin credentials to continue</CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={(e) => { e.preventDefault(); loginMutation.mutate(password); }} className="space-y-4">
+          <form onSubmit={(e) => { e.preventDefault(); loginMutation.mutate({ username, password }); }} className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="username">Username</Label>
+              <Input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="Enter admin username"
+                data-testid="input-admin-username"
+              />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="password">Password</Label>
               <Input

@@ -144,6 +144,15 @@ export const adminSessions = pgTable("admin_sessions", {
   lastActivityAt: timestamp("last_activity_at").defaultNow(),
 });
 
+// Admin credentials - username encrypted, password bcrypt hashed
+export const adminCredentials = pgTable("admin_credentials", {
+  id: serial("id").primaryKey(),
+  usernameEncrypted: text("username_encrypted").notNull(), // AES encrypted
+  passwordHash: text("password_hash").notNull(), // bcrypt hash
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});
+
 // Export logs for audit trail
 export const exportLogs = pgTable("export_logs", {
   id: serial("id").primaryKey(),

@@ -5,7 +5,7 @@ import {
   purchaseSpinsRequestSchema, withdrawRequestSchema, processWithdrawalSchema,
   spinLogs, userWallets, userSpinBalances, 
   withdrawalRequests, walletTransactions,
-  userFlags, adminSessions, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
+  userFlags, adminSessions, adminCredentials, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
   wagerOverrides, passwordResetTokens, sessions,
   CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances,
   users, verificationRequests, registerSchema, loginSchema
@@ -1347,6 +1347,7 @@ export async function registerRoutes(
 
   // =================== ADMIN AUTHENTICATION ===================
   const adminLoginSchema = z.object({
+    username: z.string().min(1),
     password: z.string().min(1),
   });
 
@@ -1369,25 +1370,103 @@ export async function registerRoutes(
     }
     
     try {
-      const { password } = adminLoginSchema.parse(req.body);
-      const adminPassword = process.env.ADMIN_PASSWORD;
+      const { username, password } = adminLoginSchema.parse(req.body);
       
-      if (!adminPassword) {
-        return res.status(500).json({ message: "Admin password not configured" });
-      }
+      // Fetch admin credentials from database
+      const [adminCreds] = await db.select().from(adminCredentials).limit(1);
       
-      // Use timing-safe comparison to prevent timing attacks
-      const passwordBuffer = Buffer.from(password);
-      const adminPasswordBuffer = Buffer.from(adminPassword);
-      
-      if (passwordBuffer.length !== adminPasswordBuffer.length || 
-          !crypto.timingSafeEqual(passwordBuffer, adminPasswordBuffer)) {
-        logSecurityEvent({
-          type: "auth_failure",
-          ipHash,
-          details: "Invalid admin password attempt",
-        });
-        return res.status(401).json({ message: "Invalid password" });
+      if (!adminCreds) {
+        // No admin credentials set up yet - fall back to env var for initial setup
+        const envPassword = process.env.ADMIN_PASSWORD;
+        if (!envPassword) {
+          return res.status(500).json({ message: "Admin credentials not configured. Set ADMIN_PASSWORD environment variable." });
+        }
+        // Validate password strength (minimum 12 characters for security)
+        if (envPassword.length < 12) {
+          return res.status(500).json({ message: "ADMIN_PASSWORD must be at least 12 characters" });
+        }
+        // For initial setup, username must be "Lukerewards" (case-insensitive)
+        if (username.toLowerCase() !== "lukerewards") {
+          logSecurityEvent({
+            type: "auth_failure",
+            ipHash,
+            details: "Invalid admin username attempt (initial setup)",
+          });
+          return res.status(401).json({ message: "Invalid credentials" });
+        }
+        // Check env password with timing-safe comparison
+        const passwordBuffer = Buffer.from(password);
+        const envPasswordBuffer = Buffer.from(envPassword);
+        if (passwordBuffer.length !== envPasswordBuffer.length || 
+            !crypto.timingSafeEqual(passwordBuffer, envPasswordBuffer)) {
+          logSecurityEvent({
+            type: "auth_failure",
+            ipHash,
+            details: "Invalid admin password attempt (initial setup)",
+          });
+          return res.status(401).json({ message: "Invalid credentials" });
+        }
+        // Use transaction to prevent race conditions during initial setup
+        try {
+          // Double-check no credentials exist (race condition protection)
+          const [existingCreds] = await db.select().from(adminCredentials).limit(1);
+          if (existingCreds) {
+            // Another request already created credentials, validate against those instead
+            const storedUsername = decrypt(existingCreds.usernameEncrypted);
+            if (username.toLowerCase() !== storedUsername.toLowerCase()) {
+              return res.status(401).json({ message: "Invalid credentials" });
+            }
+            const isValid = await bcrypt.compare(password, existingCreds.passwordHash);
+            if (!isValid) {
+              return res.status(401).json({ message: "Invalid credentials" });
+            }
+          } else {
+            // Create admin credentials in database for future logins
+            const usernameEncrypted = encrypt("Lukerewards");
+            const passwordHash = await bcrypt.hash(envPassword, 12);
+            await db.insert(adminCredentials).values({
+              usernameEncrypted,
+              passwordHash,
+            });
+            console.log("[Admin] Initial credentials stored in database (env var can now be removed)");
+            logSecurityEvent({
+              type: "auth_success",
+              ipHash,
+              details: "Admin credentials initialized in database",
+            });
+          }
+        } catch (insertErr: any) {
+          // Handle unique constraint violation (another concurrent request won)
+          if (insertErr.code === "23505") {
+            console.log("[Admin] Credentials already exist (concurrent creation)");
+          } else {
+            throw insertErr;
+          }
+        }
+      } else {
+        // Validate against database credentials
+        const storedUsername = decrypt(adminCreds.usernameEncrypted);
+        
+        // Case-insensitive username comparison
+        if (username.toLowerCase() !== storedUsername.toLowerCase()) {
+          logSecurityEvent({
+            type: "auth_failure",
+            ipHash,
+            details: "Invalid admin username attempt",
+          });
+          return res.status(401).json({ message: "Invalid credentials" });
+        }
+        
+        // Validate password with bcrypt
+        const isPasswordValid = await bcrypt.compare(password, adminCreds.passwordHash);
+        if (!isPasswordValid) {
+          logSecurityEvent({
+            type: "auth_failure",
+            ipHash,
+            details: "Invalid admin password attempt",
+          });
+          return res.status(401).json({ message: "Invalid credentials" });
+        }
       }
 
       // Generate new session token (regenerate on login for session fixation protection)

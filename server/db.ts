@@ -162,6 +162,17 @@ export async function bootstrapDatabase(): Promise<void> {
       )
     `);
     
+    // Create admin_credentials table - stores encrypted username and bcrypt password hash
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_credentials (
+        id SERIAL PRIMARY KEY,
+        username_encrypted VARCHAR NOT NULL,
+        password_hash VARCHAR NOT NULL,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL,
+        updated_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    
     // Create user_state table (for bonus spin tracking)
     await client.query(`
       CREATE TABLE IF NOT EXISTS user_state (
