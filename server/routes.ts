@@ -36,6 +36,8 @@ import {
   generateCSRFToken,
   getRecentSecurityEvents
 } from "./lib/security";
+import { logAdminActivity, getAdminActivityLogs, getAdminActivityLogCount, type AdminAction, type TargetType } from "./lib/adminActivityLog";
+import { createBackup, getBackupStatus, listBackupFiles } from "./lib/backup";
 
 
 // Count regular spins for a user from database (excludes bonus spins)
@@ -1344,6 +1346,14 @@ export async function registerRoutes(
         });
       }
       // Note: For rejected, the pending amount is released automatically by not counting it anymore
+      
+      await logAdminActivity({
+        action: status === "approved" ? "approve_withdrawal" : "reject_withdrawal",
+        targetType: "withdrawal",
+        targetId: String(id),
+        details: { stakeId: existing.stakeId, amount: existing.amount, admin_notes },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
 
       return res.json({ success: true, id, status });
     } catch (err) {
@@ -1547,6 +1557,14 @@ export async function registerRoutes(
         ipHash,
         details: "Admin login successful",
       });
+      
+      // Log admin activity
+      await logAdminActivity({
+        action: "login",
+        targetType: "session",
+        ipHash,
+        details: { method: "password" },
+      });
 
       return res.json({ success: true, csrf_token: csrfToken });
     } catch (err: any) {
@@ -1573,6 +1591,13 @@ export async function registerRoutes(
         type: "session_invalidated",
         ipHash,
         details: "Admin logout",
+      });
+      
+      // Log admin activity
+      await logAdminActivity({
+        action: "logout",
+        targetType: "session",
+        ipHash,
       });
     }
     
@@ -1694,6 +1719,14 @@ export async function registerRoutes(
     
     try {
       const result = await refreshCache();
+      
+      await logAdminActivity({
+        action: "refresh_cache",
+        targetType: "cache",
+        details: { rowCount: result.rowCount },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
       return res.json(result);
     } catch (err: any) {
       return res.status(500).json({ message: err.message || "Failed to refresh cache" });
@@ -1801,6 +1834,14 @@ export async function registerRoutes(
         });
       }
       
+      await logAdminActivity({
+        action: "flag_user",
+        targetType: "user",
+        targetId: stakeId,
+        details: { isBlacklisted: data.isBlacklisted, isAllowlisted: data.isAllowlisted, isDisputed: data.isDisputed },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
       return res.json({ success: true });
     } catch (err) {
       console.error("User flag error:", err);
@@ -1812,6 +1853,14 @@ export async function registerRoutes(
     if (!await requireAdmin(req, res)) return;
     const stakeId = req.params.stakeId.toLowerCase();
     await db.delete(userFlags).where(eq(userFlags.stakeId, stakeId));
+    
+    await logAdminActivity({
+      action: "unflag_user",
+      targetType: "user",
+      targetId: stakeId,
+      ipHash: hashForLogging(getClientIpForSecurity(req)),
+    });
+    
     return res.json({ success: true });
   });
 
@@ -1859,6 +1908,15 @@ export async function registerRoutes(
       }
       
       console.log(`[Admin] Set wager override for ${normalizedStakeId}: lifetime=${lifetimeWagered}, ytd=${yearToDateWagered}`);
+      
+      await logAdminActivity({
+        action: "update_wager_override",
+        targetType: "user",
+        targetId: normalizedStakeId,
+        details: { lifetimeWagered, yearToDateWagered, note },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
       return res.json({ success: true });
     } catch (err) {
       console.error("Wager override error:", err);
@@ -1872,6 +1930,14 @@ export async function registerRoutes(
     const stakeId = req.params.stakeId.toLowerCase();
     await db.delete(wagerOverrides).where(eq(wagerOverrides.stakeId, stakeId));
     console.log(`[Admin] Deleted wager override for ${stakeId}`);
+    
+    await logAdminActivity({
+      action: "delete_wager_override",
+      targetType: "user",
+      targetId: stakeId,
+      ipHash: hashForLogging(getClientIpForSecurity(req)),
+    });
+    
     return res.json({ success: true });
   });
 
@@ -2064,6 +2130,14 @@ export async function registerRoutes(
       } else {
         await db.insert(featureToggles).values({ key, value });
       }
+      
+      await logAdminActivity({
+        action: "update_toggle",
+        targetType: "toggle",
+        targetId: key,
+        details: { value },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
       
       return res.json({ success: true });
     } catch (err) {
@@ -2290,6 +2364,13 @@ export async function registerRoutes(
         totalTickets,
         dataHash,
         exportedBy: "admin",
+      });
+      
+      await logAdminActivity({
+        action: "export_raffle",
+        targetType: "export",
+        details: { campaign: params.campaign, weekLabel: params.weekLabel, totalTickets, rowCount: entries.length },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
       });
       
       return res.json({
@@ -2528,6 +2609,14 @@ export async function registerRoutes(
         details: `Admin ${status} verification for user ${result.userId}. Notes: ${admin_notes || "none"}`,
       });
       
+      await logAdminActivity({
+        action: status === "approved" ? "verify_user" : "reject_user",
+        targetType: "user",
+        targetId: result.userId,
+        details: { stakeUsername: result.stakeUsername, admin_notes },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
       return res.json({ success: true, id, status });
     } catch (err: any) {
       if (err.message === "NOT_FOUND") {
@@ -2675,6 +2764,14 @@ export async function registerRoutes(
         ipHash: hashForLogging(getClientIpForSecurity(req)),
         stakeId: user.stakeUsername || user.username,
         details: `Admin changed verification status for ${user.username} from ${user.verificationStatus} to ${status}`,
+      });
+      
+      await logAdminActivity({
+        action: status === "verified" ? "verify_user" : "reject_user",
+        targetType: "user",
+        targetId: userId,
+        details: { username: user.username, previousStatus: user.verificationStatus, newStatus: status },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
       });
       
       console.log(`[Admin] Changed verification for ${user.username}: ${user.verificationStatus} -> ${status}`);
@@ -2844,6 +2941,14 @@ export async function registerRoutes(
         details: `Admin deleted user account: ${user.username} (stake: ${user.stakeUsername || 'N/A'})`,
       });
       
+      await logAdminActivity({
+        action: "delete_user",
+        targetType: "user",
+        targetId: userId,
+        details: { username: user.username, stakeUsername: user.stakeUsername },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
       console.log(`[Admin] Deleted user ${user.username} (stake: ${user.stakeUsername || 'N/A'})`);
       return res.json({ success: true, username: user.username });
     } catch (err) {
@@ -2851,6 +2956,55 @@ export async function registerRoutes(
       console.error("Delete user params:", { userId: req.params.userId });
       return res.status(500).json({ message: "Failed to delete user", error: err instanceof Error ? err.message : "Unknown error" });
     }
+  });
+
+  // =================== ADMIN ACTIVITY LOGS ===================
+  app.get("/api/admin/activity-logs", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const limit = Math.min(parseInt(req.query.limit as string) || 100, 500);
+    const offset = parseInt(req.query.offset as string) || 0;
+    
+    const logs = await getAdminActivityLogs(limit, offset);
+    const total = await getAdminActivityLogCount();
+    
+    return res.json({ 
+      logs: logs.map(log => ({
+        ...log,
+        details: log.details ? JSON.parse(log.details) : null,
+      })),
+      total,
+      limit,
+      offset,
+    });
+  });
+
+  // =================== BACKUP STATUS & MANAGEMENT ===================
+  app.get("/api/admin/backup-status", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const status = await getBackupStatus();
+    const files = await listBackupFiles();
+    
+    return res.json({
+      ...status,
+      files: files.slice(0, 20),
+    });
+  });
+
+  app.post("/api/admin/backup/create", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const result = await createBackup(true);
+    
+    await logAdminActivity({
+      action: "manual_backup",
+      targetType: "backup",
+      details: { success: result.success, filename: result.filename, error: result.error },
+      ipHash: hashForLogging(getClientIpForSecurity(req)),
+    });
+    
+    return res.json(result);
   });
 
   return httpServer;

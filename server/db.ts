@@ -26,6 +26,9 @@ export async function bootstrapDatabase(): Promise<void> {
   
   const client = await pool.connect();
   try {
+    // Ensure we're using the public schema
+    await client.query(`SET search_path TO public`);
+    
     // Create sessions table (required for express-session)
     await client.query(`
       CREATE TABLE IF NOT EXISTS sessions (
@@ -256,6 +259,31 @@ export async function bootstrapDatabase(): Promise<void> {
         stake_id VARCHAR UNIQUE NOT NULL,
         wagered_amount INTEGER NOT NULL,
         period_label VARCHAR NOT NULL
+      )
+    `);
+    
+    // Create admin_activity_logs table for audit trail
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS admin_activity_logs (
+        id SERIAL PRIMARY KEY,
+        action VARCHAR NOT NULL,
+        target_type VARCHAR,
+        target_id VARCHAR,
+        details TEXT,
+        ip_hash VARCHAR,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    
+    // Create backup_logs table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS backup_logs (
+        id SERIAL PRIMARY KEY,
+        filename VARCHAR NOT NULL,
+        size_bytes INTEGER,
+        status VARCHAR NOT NULL,
+        error_message TEXT,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
       )
     `);
     

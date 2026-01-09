@@ -10,6 +10,7 @@ import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/secu
 import { enforceSecurityRequirements } from "./lib/config";
 import { pool, bootstrapDatabase } from "./db";
 import { verifyToken } from "./lib/jwt";
+import { startBackupScheduler } from "./lib/backup";
 
 // Validate security requirements at startup - fail hard if missing
 enforceSecurityRequirements();
@@ -175,6 +176,7 @@ app.use((req, res, next) => {
   }
   
   startBackgroundRefresh();
+  startBackupScheduler();
   
   await registerRoutes(httpServer, app);
 

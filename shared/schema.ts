@@ -228,6 +228,27 @@ export const passwordResetTokens = pgTable("password_reset_tokens", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Admin activity logs for comprehensive audit trail
+export const adminActivityLogs = pgTable("admin_activity_logs", {
+  id: serial("id").primaryKey(),
+  action: text("action").notNull(), // "login", "logout", "verify_user", "reject_user", "approve_withdrawal", "reject_withdrawal", "flag_user", "export_raffle", "refresh_cache", "update_toggle", "delete_user"
+  targetType: text("target_type"), // "user", "withdrawal", "toggle", "export", "cache"
+  targetId: text("target_id"), // ID of the affected entity (user ID, withdrawal ID, etc.)
+  details: text("details"), // JSON string with additional action details
+  ipHash: text("ip_hash"), // Hashed IP for security
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
+// Database backup logs
+export const backupLogs = pgTable("backup_logs", {
+  id: serial("id").primaryKey(),
+  filename: text("filename").notNull(),
+  sizeBytes: integer("size_bytes"),
+  status: text("status").notNull(), // "success", "failed"
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 export const insertDemoUserSchema = createInsertSchema(demoUsers).omit({ id: true });
 export const insertSpinLogSchema = createInsertSchema(spinLogs).omit({ id: true, timestamp: true });
 export const insertGuaranteedWinSchema = createInsertSchema(guaranteedWins).omit({ id: true });
@@ -243,6 +264,8 @@ export const insertRateLimitLogSchema = createInsertSchema(rateLimitLogs).omit({
 export const insertUserStateSchema = createInsertSchema(userState).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertWagerOverrideSchema = createInsertSchema(wagerOverrides).omit({ id: true, createdAt: true, updatedAt: true });
 export const insertPasswordResetTokenSchema = createInsertSchema(passwordResetTokens).omit({ id: true, createdAt: true });
+export const insertAdminActivityLogSchema = createInsertSchema(adminActivityLogs).omit({ id: true, createdAt: true });
+export const insertBackupLogSchema = createInsertSchema(backupLogs).omit({ id: true, createdAt: true });
 
 export type DemoUser = typeof demoUsers.$inferSelect;
 export type InsertDemoUser = z.infer<typeof insertDemoUserSchema>;
@@ -263,6 +286,10 @@ export type WagerOverride = typeof wagerOverrides.$inferSelect;
 export type InsertWagerOverride = z.infer<typeof insertWagerOverrideSchema>;
 export type PasswordResetToken = typeof passwordResetTokens.$inferSelect;
 export type InsertPasswordResetToken = z.infer<typeof insertPasswordResetTokenSchema>;
+export type AdminActivityLog = typeof adminActivityLogs.$inferSelect;
+export type InsertAdminActivityLog = z.infer<typeof insertAdminActivityLogSchema>;
+export type BackupLog = typeof backupLogs.$inferSelect;
+export type InsertBackupLog = z.infer<typeof insertBackupLogSchema>;
 
 export const stakeIdSchema = z
   .string()

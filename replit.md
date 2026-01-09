@@ -168,6 +168,34 @@ Navigate to `/admin` and enter admin credentials (username: "Lukerewards", passw
 - 1 in 500 chance (0.2%) to win $5
 - Tracked via user_state table (lastBonusSpinAt field)
 
+## Admin Activity Logging
+
+All admin panel actions are logged to the `admin_activity_logs` table:
+- **Login/logout**: Admin session events
+- **User verification**: Approvals and rejections
+- **Withdrawal processing**: Approvals and rejections
+- **User flags**: Blacklist/allowlist/disputed changes
+- **Feature toggles**: Runtime configuration changes
+- **Cache refresh**: Manual data refresh
+- **Raffle export**: Export generation
+- **User deletion**: Account removal
+- **Manual backups**: Triggered backup creation
+
+View logs via admin panel or `/api/admin/activity-logs` endpoint.
+
+## Automated Backups
+
+Database backups run automatically every 12 hours:
+- **Schedule**: Every 12 hours starting 1 minute after server start
+- **Retention**: 7 days (14 backup files maximum)
+- **Location**: `./backups/` directory with timestamped filenames
+- **Format**: pg_dump SQL format
+- **Admin endpoints**:
+  - `GET /api/admin/backup-status` - View backup status and history
+  - `POST /api/admin/backup/create` - Trigger manual backup
+
+Backup logs stored in `backup_logs` table for audit trail.
+
 ### Required Environment Variables
 - `DATABASE_URL` - PostgreSQL connection
 - `SESSION_SECRET` - Session encryption key (min 32 chars, also used for encryption key derivation)
