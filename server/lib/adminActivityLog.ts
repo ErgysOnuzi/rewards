@@ -19,7 +19,8 @@ export type AdminAction =
   | "update_wager_override"
   | "delete_wager_override"
   | "view_user"
-  | "manual_backup";
+  | "manual_backup"
+  | "download_backup";
 
 export type TargetType = "user" | "withdrawal" | "toggle" | "export" | "cache" | "backup" | "session";
 

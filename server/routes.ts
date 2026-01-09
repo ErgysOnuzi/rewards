@@ -3052,5 +3052,41 @@ export async function registerRoutes(
     return res.json(result);
   });
 
+  // Download a specific backup file
+  app.get("/api/admin/backup/download/:filename", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const { filename } = req.params;
+    
+    // Validate filename format to prevent path traversal
+    if (!filename.match(/^backup_\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}\.sql$/)) {
+      return res.status(400).json({ message: "Invalid backup filename" });
+    }
+    
+    const backupPath = path.join(process.cwd(), "backups", filename);
+    
+    try {
+      // Check if file exists
+      if (!fs.existsSync(backupPath)) {
+        return res.status(404).json({ message: "Backup file not found" });
+      }
+      
+      await logAdminActivity({
+        action: "download_backup",
+        targetType: "backup",
+        details: { filename },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
+      res.setHeader("Content-Type", "application/sql");
+      res.setHeader("Content-Disposition", `attachment; filename="${filename}"`);
+      
+      const fileContent = fs.readFileSync(backupPath, "utf-8");
+      return res.send(fileContent);
+    } catch (err) {
+      return res.status(500).json({ message: "Failed to download backup" });
+    }
+  });
+
   return httpServer;
 }

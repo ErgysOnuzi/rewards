@@ -370,6 +370,32 @@ export default function Admin() {
     enabled: isAuthenticated === true,
   });
 
+  // Backup status query
+  const { data: backupStatus, refetch: refetchBackups } = useQuery<{ 
+    lastBackup: string | null;
+    backupCount: number;
+    nextScheduled: string | null;
+    files: { name: string; size: number; created: string }[];
+  }>({
+    queryKey: ["/api/admin/backup-status"],
+    enabled: isAuthenticated === true,
+  });
+
+  const createBackup = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/backup/create", { method: "POST", credentials: "include" });
+      if (!res.ok) throw new Error("Failed to create backup");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      refetchBackups();
+      toast({ title: "Backup created", description: data.filename });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to create backup", description: err.message, variant: "destructive" });
+    },
+  });
+
   const processVerification = useMutation({
     mutationFn: async ({ id, status, admin_notes }: { id: number; status: "approved" | "rejected"; admin_notes?: string }) => {
       return apiRequest("POST", "/api/admin/verifications/process", { id, status, admin_notes });
@@ -735,6 +761,9 @@ export default function Admin() {
               </TabsTrigger>
               <TabsTrigger value="spreadsheet-com" data-testid="tab-spreadsheet-com" className="text-xs sm:text-sm">
                 <Database className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Stake.com</span>
+              </TabsTrigger>
+              <TabsTrigger value="backups" data-testid="tab-backups" className="text-xs sm:text-sm">
+                <FileDown className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Backups</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2017,6 +2046,100 @@ export default function Admin() {
                   {(!spreadsheetComData?.users || spreadsheetComData.users.length === 0) && (
                     <div className="text-center text-muted-foreground py-8">No users found</div>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Backups Tab */}
+          <TabsContent value="backups" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <FileDown className="w-5 h-5" />
+                    Database Backups
+                  </CardTitle>
+                  <CardDescription>
+                    Automatic backups run every 12 hours. Files are stored in ./backups/
+                  </CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={() => refetchBackups()} 
+                    variant="outline" 
+                    size="sm"
+                    data-testid="button-refresh-backups"
+                  >
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                    Refresh
+                  </Button>
+                  <Button 
+                    onClick={() => createBackup.mutate()} 
+                    disabled={createBackup.isPending}
+                    size="sm"
+                    data-testid="button-create-backup"
+                  >
+                    <Database className={`w-4 h-4 mr-2 ${createBackup.isPending ? "animate-spin" : ""}`} />
+                    Create Backup
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="grid sm:grid-cols-2 gap-4 text-sm">
+                    <div>
+                      <span className="text-muted-foreground">Last Backup:</span>{" "}
+                      {backupStatus?.lastBackup ? formatDate(backupStatus.lastBackup) : "Never"}
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Total Backups:</span>{" "}
+                      {backupStatus?.backupCount || 0}
+                    </div>
+                  </div>
+                  
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr className="border-b">
+                          <th className="text-left py-2 px-3">Filename</th>
+                          <th className="text-right py-2 px-3">Size</th>
+                          <th className="text-right py-2 px-3">Created</th>
+                          <th className="text-right py-2 px-3">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {backupStatus?.files?.map((file) => (
+                          <tr key={file.name} className="border-b hover:bg-muted/30">
+                            <td className="py-2 px-3 font-mono text-xs">{file.name}</td>
+                            <td className="py-2 px-3 text-right">{(file.size / 1024).toFixed(1)} KB</td>
+                            <td className="py-2 px-3 text-right text-muted-foreground">
+                              {formatDate(file.created)}
+                            </td>
+                            <td className="py-2 px-3 text-right">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                  window.open(`/api/admin/backup/download/${file.name}`, '_blank');
+                                }}
+                                data-testid={`button-download-${file.name}`}
+                              >
+                                <Download className="w-4 h-4" />
+                              </Button>
+                            </td>
+                          </tr>
+                        ))}
+                        {(!backupStatus?.files || backupStatus.files.length === 0) && (
+                          <tr>
+                            <td colSpan={4} className="text-center py-8 text-muted-foreground">
+                              No backup files found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
                 </div>
               </CardContent>
             </Card>
