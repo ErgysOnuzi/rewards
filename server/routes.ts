@@ -1137,6 +1137,37 @@ export async function registerRoutes(
     }
   });
 
+  // Demo spin - no login required, just for trying the experience
+  app.post("/api/spin/demo", async (req: Request, res: Response) => {
+    try {
+      const ipHash = hashIp(req.ip || "unknown");
+      
+      // Demo spin has same odds as bonus spin (1 in 500 = 0.2%)
+      const roll = Math.random();
+      const isWin = roll < 0.002;
+      
+      // Generate prize based on result
+      const prize = isWin 
+        ? { label: "[DEMO] $5", value: 5, color: "green" as const }
+        : { label: "[DEMO] $0", value: 0, color: "grey" as const };
+
+      console.log(`[Demo Spin] IP: ${ipHash.slice(0, 8)}... Result: ${isWin ? "WIN" : "LOSE"}`);
+
+      return res.json({
+        stake_id: "demo_user",
+        result: isWin ? "WIN" : "LOSE",
+        prize_label: prize.label,
+        prize_value: prize.value,
+        prize_color: prize.color,
+        wallet_balance: 0,
+        is_demo: true,
+      });
+    } catch (err) {
+      console.error("Demo spin error:", err);
+      return res.status(500).json({ message: "Something went wrong" } as ErrorResponse);
+    }
+  });
+
   // Check bonus spin availability
   app.post("/api/spin/bonus/check", async (req: Request, res: Response) => {
     try {

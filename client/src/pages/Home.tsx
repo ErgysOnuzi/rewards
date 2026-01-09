@@ -3,6 +3,7 @@ import Header from "@/components/Header";
 import HeroSection from "@/components/HeroSection";
 import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatus";
 import CaseOpening, { CaseSpinResult, BonusStatus } from "@/components/CaseOpening";
+import DemoSpin from "@/components/DemoSpin";
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
 import { safeJsonParse, getAuthToken } from "@/lib/queryClient";
@@ -262,20 +263,25 @@ export default function Home() {
     );
   }
 
-  // Show login prompt if not authenticated
+  // Show demo spin and login prompt if not authenticated
   if (!isAuthenticated) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
         <Header />
         <main className="flex-1">
-          <div className="max-w-4xl mx-auto px-4 space-y-12">
+          <div className="max-w-4xl mx-auto px-4 space-y-8">
             <HeroSection />
+            
+            <div className="max-w-md mx-auto">
+              <DemoSpin onLoginClick={() => navigate("/register")} />
+            </div>
+
             <Card className="max-w-md mx-auto">
               <CardContent className="pt-6 text-center space-y-4">
                 <LogIn className="w-12 h-12 mx-auto text-muted-foreground" />
-                <h3 className="text-lg font-semibold">Login Required</h3>
+                <h3 className="text-lg font-semibold">Already have an account?</h3>
                 <p className="text-sm text-muted-foreground">
-                  Please login to check your tickets and spin for prizes.
+                  Login to check your tickets and spin for real prizes.
                 </p>
                 <Button onClick={() => navigate("/login")} className="w-full" data-testid="button-login-prompt">
                   Login

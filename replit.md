@@ -168,6 +168,13 @@ Navigate to `/admin` and enter admin credentials (username: "Lukerewards", passw
 - 1 in 500 chance (0.2%) to win $5
 - Tracked via user_state table (lastBonusSpinAt field)
 
+### Demo Spin (No Login Required)
+- Available to visitors without creating an account
+- Shows the full spinning animation and experience
+- Same 0.2% win chance but prizes are marked as "[DEMO]"
+- Encourages visitors to register for real prizes
+- Endpoint: POST `/api/spin/demo`
+
 ## Admin Activity Logging
 
 All admin panel actions are logged to the `admin_activity_logs` table:
