@@ -6,7 +6,6 @@ import { Loader2, Gift, Sparkles } from "lucide-react";
 import { CASE_PRIZES, type CasePrize } from "@shared/schema";
 import { motion, AnimatePresence } from "framer-motion";
 import { playSpinStart, playSpinTick, playWinSound, playLoseSound, resumeAudioContext, isSoundEnabled } from "@/lib/sounds";
-import { useLocation } from "wouter";
 
 interface DemoSpinProps {
   onLoginClick: () => void;
@@ -56,10 +55,10 @@ export default function DemoSpin({ onLoginClick }: DemoSpinProps) {
   const [lastResult, setLastResult] = useState<{ result: string; prize_label: string; prize_color: string } | null>(null);
   const [reelItems, setReelItems] = useState<CasePrize[]>([]);
   const [reelPosition, setReelPosition] = useState(0);
-  const [, navigate] = useLocation();
+  const [highlightedIndex, setHighlightedIndex] = useState<number | null>(null);
   
   const reelRef = useRef<HTMLDivElement>(null);
-  const animationRef = useRef<number | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const tickIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const handleDemoSpin = async () => {
@@ -68,6 +67,7 @@ export default function DemoSpin({ onLoginClick }: DemoSpinProps) {
     resumeAudioContext();
     setSpinState("spinning");
     setLastResult(null);
+    setHighlightedIndex(null);
 
     try {
       const response = await fetch("/api/spin/demo", {
@@ -95,78 +95,56 @@ export default function DemoSpin({ onLoginClick }: DemoSpinProps) {
         playSpinStart();
       }
 
-      animateReel(items, targetPrize, data);
+      const itemWidth = 100;
+      const gapWidth = 4;
+      const slotWidth = itemWidth + gapWidth;
+      const targetIndex = Math.floor(items.length * 0.75);
+      const containerWidth = containerRef.current?.offsetWidth || 400;
+      const centerOffset = containerWidth / 2 - itemWidth / 2;
+      const finalPosition = -(targetIndex * slotWidth) + centerOffset;
+
+      if (isSoundEnabled()) {
+        let lastTickPos = 0;
+        tickIntervalRef.current = setInterval(() => {
+          const currentPos = Math.abs(reelPosition);
+          if (Math.abs(currentPos - lastTickPos) >= slotWidth / 2) {
+            playSpinTick();
+            lastTickPos = Math.floor(currentPos / (slotWidth / 2)) * (slotWidth / 2);
+          }
+        }, 50);
+      }
+
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          setReelPosition(finalPosition);
+          
+          setTimeout(() => {
+            if (tickIntervalRef.current) {
+              clearInterval(tickIntervalRef.current);
+              tickIntervalRef.current = null;
+            }
+            
+            setHighlightedIndex(targetIndex);
+            
+            if (data.result === "WIN") {
+              playWinSound();
+            } else {
+              playLoseSound();
+            }
+            
+            setLastResult(data);
+            setSpinState("result");
+          }, 3500);
+        });
+      });
     } catch (err) {
       console.error("Demo spin error:", err);
       setSpinState("idle");
     }
   };
 
-  const animateReel = (items: CasePrize[], targetPrize: CasePrize, result: any) => {
-    const itemHeight = 80;
-    const targetIndex = Math.floor(items.length * 0.75);
-    const targetPosition = targetIndex * itemHeight;
-    
-    const duration = 4000;
-    const startTime = Date.now();
-    const startPosition = 0;
-    
-    if (tickIntervalRef.current) {
-      clearInterval(tickIntervalRef.current);
-    }
-    
-    let lastTickPosition = 0;
-    tickIntervalRef.current = setInterval(() => {
-      const currentPosition = reelRef.current ? 
-        parseInt(reelRef.current.style.transform?.replace(/[^0-9-]/g, '') || '0') : 0;
-      const tickThreshold = itemHeight / 2;
-      
-      if (Math.abs(currentPosition - lastTickPosition) >= tickThreshold) {
-        if (isSoundEnabled()) {
-          playSpinTick();
-        }
-        lastTickPosition = Math.floor(currentPosition / tickThreshold) * tickThreshold;
-      }
-    }, 50);
-    
-    const animate = () => {
-      const elapsed = Date.now() - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      const eased = 1 - Math.pow(1 - progress, 4);
-      const currentPosition = startPosition + (targetPosition * eased);
-      
-      setReelPosition(-currentPosition);
-      
-      if (progress < 1) {
-        animationRef.current = requestAnimationFrame(animate);
-      } else {
-        if (tickIntervalRef.current) {
-          clearInterval(tickIntervalRef.current);
-          tickIntervalRef.current = null;
-        }
-        
-        setLastResult(result);
-        setSpinState("result");
-        
-        if (isSoundEnabled()) {
-          if (result.result === "WIN") {
-            playWinSound();
-          } else {
-            playLoseSound();
-          }
-        }
-      }
-    };
-    
-    animationRef.current = requestAnimationFrame(animate);
-  };
-
   useEffect(() => {
     return () => {
-      if (animationRef.current) {
-        cancelAnimationFrame(animationRef.current);
-      }
       if (tickIntervalRef.current) {
         clearInterval(tickIntervalRef.current);
       }
@@ -178,6 +156,7 @@ export default function DemoSpin({ onLoginClick }: DemoSpinProps) {
     setLastResult(null);
     setReelItems([]);
     setReelPosition(0);
+    setHighlightedIndex(null);
   };
 
   return (
@@ -194,35 +173,37 @@ export default function DemoSpin({ onLoginClick }: DemoSpinProps) {
           </p>
         </div>
 
-        <div className="relative h-[240px] bg-gradient-to-b from-background via-muted/30 to-background rounded-lg overflow-hidden border">
-          <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-10">
-            <div className="w-full h-[80px] border-y-2 border-primary/50 bg-primary/5" />
-          </div>
+        <div 
+          ref={containerRef}
+          className="relative h-[100px] bg-gradient-to-r from-background via-muted/30 to-background rounded-lg overflow-hidden border"
+        >
+          <div className="absolute inset-y-0 left-1/2 -translate-x-1/2 w-[100px] border-x-2 border-primary/50 bg-primary/5 z-10 pointer-events-none" />
           
-          <div className="absolute left-0 top-1/2 -translate-y-1/2 w-3 h-8 bg-primary rounded-r-sm z-20" />
-          <div className="absolute right-0 top-1/2 -translate-y-1/2 w-3 h-8 bg-primary rounded-l-sm z-20" />
+          <div className="absolute top-0 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary rotate-45 -translate-y-1/2 z-20" />
+          <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-4 h-4 bg-primary rotate-45 translate-y-1/2 z-20" />
           
-          <div className="h-full flex items-center justify-center overflow-hidden">
+          <div className="h-full flex items-center overflow-hidden">
             {reelItems.length > 0 ? (
               <div 
                 ref={reelRef}
-                className="flex flex-col transition-none"
-                style={{ transform: `translateY(${reelPosition + 80}px)` }}
+                className="absolute top-0 left-0 h-full flex items-center gap-1"
+                style={{
+                  transform: `translateX(${reelPosition}px)`,
+                  transition: spinState === "spinning" ? "transform 3.5s cubic-bezier(0.15, 0.85, 0.25, 1)" : "none",
+                }}
               >
                 {reelItems.map((prize, index) => (
                   <div 
                     key={index} 
-                    className="h-[80px] flex items-center justify-center px-4"
+                    className={`w-[100px] h-[80px] flex-shrink-0 rounded-lg border-2 flex items-center justify-center transition-all duration-300 ${getPrizeColorClasses(prize.color)} ${highlightedIndex === index ? "ring-4 ring-primary ring-offset-2 ring-offset-background scale-105" : ""}`}
                   >
-                    <div className={`w-full max-w-[200px] h-[60px] rounded-lg border-2 flex items-center justify-center ${getPrizeColorClasses(prize.color)}`}>
-                      <span className="text-lg font-bold">{prize.label}</span>
-                    </div>
+                    <span className="text-sm font-bold text-center px-1">{prize.label}</span>
                   </div>
                 ))}
               </div>
             ) : (
-              <div className="text-muted-foreground text-center">
-                <Gift className="w-12 h-12 mx-auto mb-2 opacity-50" />
+              <div className="w-full text-muted-foreground text-center">
+                <Gift className="w-10 h-10 mx-auto mb-2 opacity-50" />
                 <p className="text-sm">Click spin to try!</p>
               </div>
             )}
