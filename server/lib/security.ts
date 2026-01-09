@@ -115,7 +115,16 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
   const referer = req.headers.referer;
   const host = req.headers.host;
   
-  // Validate Origin header matches Host
+  // Trusted domains that can embed this app in iframes
+  // These domains are allowed to make cross-origin requests
+  const TRUSTED_EMBEDDING_DOMAINS = [
+    "lukerewards.com",
+    "www.lukerewards.com",
+    "lukethedegen.com",
+    "www.lukethedegen.com",
+  ];
+  
+  // Validate Origin header matches Host or trusted domains
   if (origin) {
     try {
       const originUrl = new URL(origin);
@@ -123,7 +132,12 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
         host?.split(":")[0],
         "localhost",
         "127.0.0.1",
+        ...TRUSTED_EMBEDDING_DOMAINS,
       ].filter(Boolean);
+      
+      // Also allow replit domains dynamically
+      const replitDomains = process.env.REPLIT_DOMAINS?.split(",") || [];
+      replitDomains.forEach(d => expectedHosts.push(d.trim()));
       
       if (!expectedHosts.includes(originUrl.hostname)) {
         logSecurityEvent({
@@ -140,7 +154,14 @@ export function csrfProtection(req: Request, res: Response, next: NextFunction) 
     // In production, require origin or valid referer
     try {
       const refererUrl = new URL(referer);
-      const expectedHosts = [host?.split(":")[0]].filter(Boolean);
+      const expectedHosts = [
+        host?.split(":")[0],
+        ...TRUSTED_EMBEDDING_DOMAINS,
+      ].filter(Boolean);
+      
+      // Also allow replit domains dynamically
+      const replitDomains = process.env.REPLIT_DOMAINS?.split(",") || [];
+      replitDomains.forEach(d => expectedHosts.push(d.trim()));
       
       if (!expectedHosts.includes(refererUrl.hostname)) {
         logSecurityEvent({
