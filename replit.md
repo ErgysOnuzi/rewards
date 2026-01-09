@@ -122,6 +122,7 @@ shared/               # Shared code between client/server
 - **wallet_transactions**: Audit trail of all wallet transactions
 - **user_flags**: Blacklist/allowlist/disputed user flags
 - **admin_sessions**: Admin authentication sessions
+- **admin_credentials**: Encrypted admin username and bcrypt password hash
 - **export_logs**: Audit trail of raffle exports
 - **feature_toggles**: Runtime configuration settings
 - **payouts**: Track paid-out winnings
@@ -130,7 +131,13 @@ shared/               # Shared code between client/server
 ## Admin Control Panel
 
 ### Access
-Navigate to `/admin` and enter the ADMIN_PASSWORD to access the control panel.
+Navigate to `/admin` and enter admin credentials (username: "Lukerewards", password: your ADMIN_PASSWORD) to access the control panel.
+
+### Admin Authentication Security
+- **Initial Setup**: On first login, credentials from ADMIN_PASSWORD env var are stored in database
+- **Database Storage**: Username is AES-encrypted, password is bcrypt-hashed (12 rounds)
+- **After Setup**: ADMIN_PASSWORD env var is no longer required (credentials stored in admin_credentials table)
+- **Rate Limiting**: 5 login attempts per 15 minutes per IP
 
 ### Features
 1. **Data Status**: Monitor Google Sheets cache status, row counts, duplicates, refresh cache manually
@@ -163,9 +170,9 @@ Navigate to `/admin` and enter the ADMIN_PASSWORD to access the control panel.
 
 ### Required Environment Variables
 - `DATABASE_URL` - PostgreSQL connection
-- `SESSION_SECRET` - Session encryption key
+- `SESSION_SECRET` - Session encryption key (min 32 chars, also used for encryption key derivation)
 - `GOOGLE_SHEETS_ID` - The spreadsheet ID for NGR data
-- `ADMIN_PASSWORD` - Password for admin panel access
+- `ADMIN_PASSWORD` - Password for admin panel (only needed for initial setup, then stored encrypted in database)
 
 ### Optional Environment Variables
 - `WAGER_SHEET_NAME` - Tab name for wager data (default: "Affiliate NGR Summary")

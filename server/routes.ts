@@ -20,7 +20,7 @@ import type {
 } from "@shared/schema";
 import { getWagerRow, calculateTickets, getCacheStatus, refreshCache, getAllWagerData, computeDataHash, getWeightedWager, getWeightedCacheStatus, getWeightedWagerWithDomain, usernameExistsInSpreadsheet } from "./lib/sheets";
 import { hashIp, maskUsername } from "./lib/hash";
-import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts } from "./lib/rateLimit";
+import { isRateLimited, isStakeIdRateLimited, isAdminLoginRateLimited, getAdminLoginLockoutMs, resetAdminLoginAttempts, isAuthRateLimited, getAuthLockoutMs, resetAuthAttempts } from "./lib/rateLimit";
 import { config } from "./lib/config";
 import { encrypt, decrypt } from "./lib/encryption";
 import { generateToken } from "./lib/jwt";
@@ -200,6 +200,23 @@ export async function registerRoutes(
   
   // Register new user - username must exist in the appropriate spreadsheet
   app.post("/api/auth/register", async (req: Request, res: Response) => {
+    const clientIp = getClientIpForSecurity(req);
+    const ipHash = hashForLogging(clientIp);
+    
+    // Rate limit registration attempts
+    if (isAuthRateLimited(ipHash)) {
+      const lockoutMs = getAuthLockoutMs(ipHash);
+      const lockoutMinutes = Math.ceil(lockoutMs / 60000);
+      logSecurityEvent({
+        type: "rate_limit_exceeded",
+        ipHash,
+        details: `Registration rate limit exceeded. Locked for ${lockoutMinutes} minutes`,
+      });
+      return res.status(429).json({ 
+        message: `Too many registration attempts. Try again in ${lockoutMinutes} minutes.` 
+      });
+    }
+    
     try {
       console.log("[Register] Request received:", {
         hasBody: !!req.body,
@@ -264,9 +281,12 @@ export async function registerRoutes(
         console.warn("[Register] Session error (continuing with token auth):", sessionErr);
       }
       
+      // Reset rate limit on successful registration
+      resetAuthAttempts(ipHash);
+      
       logSecurityEvent({
         type: "auth_success",
-        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        ipHash,
         stakeId: username,
         details: "User registration successful",
       });
@@ -306,6 +326,23 @@ export async function registerRoutes(
   
   // Login
   app.post("/api/auth/login", async (req: Request, res: Response) => {
+    const clientIp = getClientIpForSecurity(req);
+    const ipHash = hashForLogging(clientIp);
+    
+    // Rate limit login attempts
+    if (isAuthRateLimited(ipHash)) {
+      const lockoutMs = getAuthLockoutMs(ipHash);
+      const lockoutMinutes = Math.ceil(lockoutMs / 60000);
+      logSecurityEvent({
+        type: "rate_limit_exceeded",
+        ipHash,
+        details: `Login rate limit exceeded. Locked for ${lockoutMinutes} minutes`,
+      });
+      return res.status(429).json({ 
+        message: `Too many login attempts. Try again in ${lockoutMinutes} minutes.` 
+      });
+    }
+    
     try {
       console.log("[Login] Request received:", {
         hasBody: !!req.body,
@@ -380,9 +417,12 @@ export async function registerRoutes(
         console.warn("[Login] Session error (continuing with token auth):", sessionErr);
       }
       
+      // Reset rate limit counter on successful login
+      resetAuthAttempts(ipHash);
+      
       logSecurityEvent({
         type: "auth_success",
-        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        ipHash,
         stakeId: username,
         details: "User login successful",
       });

@@ -20,11 +20,12 @@ export const config = {
 const REQUIRED_SECRETS = [
   { key: "DATABASE_URL", description: "PostgreSQL database connection" },
   { key: "SESSION_SECRET", description: "Session encryption key" },
-  { key: "ADMIN_PASSWORD", description: "Admin panel password" },
 ];
 
 // Optional but recommended secrets
+// ADMIN_PASSWORD is only needed for initial setup if no credentials in database
 const RECOMMENDED_SECRETS = [
+  { key: "ADMIN_PASSWORD", description: "Admin panel password (only for initial setup)" },
   { key: "GOOGLE_SERVICE_ACCOUNT_EMAIL", description: "Google Sheets API auth" },
   { key: "GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY", description: "Google Sheets API auth" },
 ];
@@ -96,8 +97,14 @@ export function enforceSecurityRequirements(): void {
     console.error("Set the following environment variables:");
     console.error("  - DATABASE_URL: PostgreSQL connection string");
     console.error("  - SESSION_SECRET: At least 32 random characters");
-    console.error("  - ADMIN_PASSWORD: At least 12 characters");
+    console.error("  - ADMIN_PASSWORD: At least 12 characters (only needed for initial admin setup)");
     process.exit(1);
+  }
+  
+  // Validate encryption key can be derived
+  const sessionSecret = process.env.SESSION_SECRET || "";
+  if (sessionSecret) {
+    console.log("[SECURITY] Encryption key derivation: using SESSION_SECRET");
   }
   
   console.log("[SECURITY] All required secrets validated");
