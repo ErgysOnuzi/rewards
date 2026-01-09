@@ -1484,7 +1484,8 @@ export async function registerRoutes(
         }
         // Validate password strength (minimum 12 characters for security)
         if (envPassword.length < 12) {
-          return res.status(500).json({ message: "ADMIN_PASSWORD must be at least 12 characters" });
+          console.log(`[Admin Login Debug] ADMIN_PASSWORD length: ${envPassword.length}, first 2 chars: ${envPassword.substring(0, 2)}`);
+          return res.status(500).json({ message: `ADMIN_PASSWORD must be at least 12 characters (current length: ${envPassword.length})` });
         }
         // For initial setup, username must be "Lukerewards" (case-insensitive)
         if (username.toLowerCase() !== "lukerewards") {
