@@ -235,21 +235,25 @@ export async function registerRoutes(
         verificationStatus: "unverified",
       }).returning();
       
-      // Set session and save explicitly
+      // Set session (best effort - may fail in iframe contexts)
       (req.session as any).userId = newUser.id;
       
-      // Explicitly save session to ensure it persists
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) {
-            console.error("[Register] Session save error:", err);
-            reject(err);
-          } else {
-            console.log("[Register] Session saved successfully for user:", newUser.id);
+      // Try to save session but don't block registration if it fails
+      // JWT token auth will work regardless of session state
+      try {
+        await new Promise<void>((resolve) => {
+          req.session.save((err) => {
+            if (err) {
+              console.warn("[Register] Session save failed (non-blocking):", err.message);
+            } else {
+              console.log("[Register] Session saved successfully for user:", newUser.id);
+            }
             resolve();
-          }
+          });
         });
-      });
+      } catch (sessionErr) {
+        console.warn("[Register] Session error (continuing with token auth):", sessionErr);
+      }
       
       logSecurityEvent({
         type: "auth_success",
@@ -320,36 +324,31 @@ export async function registerRoutes(
         return res.status(401).json({ message: "Invalid username or password" });
       }
       
-      // Set session and save explicitly
+      // Set session (best effort - may fail in iframe contexts)
       (req.session as any).userId = user.id;
       
-      // Explicitly save session to ensure it persists
-      await new Promise<void>((resolve, reject) => {
-        req.session.save((err) => {
-          if (err) {
-            console.error("[Login] Session save error:", err);
-            reject(err);
-          } else {
-            console.log("[Login] Session saved successfully:", {
-              userId: user.id,
-              sessionId: req.session.id?.substring(0, 8) + "...",
-              sessionStore: typeof req.session.save,
-            });
-            resolve();
-          }
+      // Try to save session but don't block login if it fails
+      // JWT token auth will work regardless of session state
+      try {
+        await new Promise<void>((resolve, reject) => {
+          req.session.save((err) => {
+            if (err) {
+              console.warn("[Login] Session save failed (non-blocking):", err.message);
+              // Don't reject - just log and continue with token auth
+              resolve();
+            } else {
+              console.log("[Login] Session saved successfully:", {
+                userId: user.id,
+                sessionId: req.session.id?.substring(0, 8) + "...",
+              });
+              resolve();
+            }
+          });
         });
-      });
-      
-      // Debug: Log response headers to verify Set-Cookie is present
-      console.log("[Login] Response will be sent. Session ID:", req.session?.id?.substring(0, 8) + "...");
-      console.log("[Login] Cookie settings:", {
-        secure: req.session.cookie.secure,
-        sameSite: req.session.cookie.sameSite,
-        httpOnly: req.session.cookie.httpOnly,
-        maxAge: req.session.cookie.maxAge,
-        domain: req.session.cookie.domain,
-        path: req.session.cookie.path,
-      });
+      } catch (sessionErr) {
+        // Session save failed but we'll continue with token auth
+        console.warn("[Login] Session error (continuing with token auth):", sessionErr);
+      }
       
       logSecurityEvent({
         type: "auth_success",
@@ -377,7 +376,12 @@ export async function registerRoutes(
       if (err instanceof ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" });
       }
-      console.error("Login error:", err);
+      // Log detailed error info for debugging
+      console.error("Login error:", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        name: err instanceof Error ? err.name : typeof err,
+      });
       return res.status(500).json({ message: "Login failed" });
     }
   });
