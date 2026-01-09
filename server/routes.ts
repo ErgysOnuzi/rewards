@@ -288,12 +288,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" });
       }
       // Log detailed error info for debugging
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorName = err instanceof Error ? err.name : typeof err;
       console.error("Registration error:", {
-        message: err instanceof Error ? err.message : String(err),
+        message: errorMessage,
         stack: err instanceof Error ? err.stack : undefined,
-        name: err instanceof Error ? err.name : typeof err,
+        name: errorName,
       });
-      return res.status(500).json({ message: "Registration failed" });
+      // Include error details in response for debugging production issues
+      return res.status(500).json({ 
+        message: "Registration failed",
+        error: errorMessage,
+        errorType: errorName,
+      });
     }
   });
   
@@ -400,12 +407,19 @@ export async function registerRoutes(
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" });
       }
       // Log detailed error info for debugging
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const errorName = err instanceof Error ? err.name : typeof err;
       console.error("Login error:", {
-        message: err instanceof Error ? err.message : String(err),
+        message: errorMessage,
         stack: err instanceof Error ? err.stack : undefined,
-        name: err instanceof Error ? err.name : typeof err,
+        name: errorName,
       });
-      return res.status(500).json({ message: "Login failed" });
+      // Include error details in response for debugging production issues
+      return res.status(500).json({ 
+        message: "Login failed",
+        error: errorMessage,
+        errorType: errorName,
+      });
     }
   });
   
