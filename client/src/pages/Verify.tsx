@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/hooks/use-auth";
+import { getAuthToken } from "@/lib/queryClient";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -13,6 +14,11 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Checkbox } from "@/components/ui/checkbox";
 import Header from "@/components/Header";
 import Footer from "@/components/Footer";
+
+function getAuthHeaders(): HeadersInit {
+  const token = getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
 
 interface VerificationStatus {
   stake_username: string | null;
@@ -57,6 +63,7 @@ export default function Verify() {
     try {
       const response = await fetch("/api/verification/status", {
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (response.status === 401) {
         // Session expired - redirect to login
@@ -82,6 +89,7 @@ export default function Verify() {
       const response = await fetch("/api/verification/accept-disclaimer", {
         method: "POST",
         credentials: "include",
+        headers: getAuthHeaders(),
       });
       if (response.status === 401) {
         // Session expired - redirect to login
@@ -168,6 +176,7 @@ export default function Verify() {
       const response = await fetch("/api/verification/submit", {
         method: "POST",
         credentials: "include",
+        headers: getAuthHeaders(),
         body: formData,
       });
 
