@@ -241,10 +241,16 @@ export async function registerRoutes(
         });
       }
       
-      // Check if username already exists in our database
+      // Check if username already exists in our database (allow re-registration if user was deleted)
       const [existing] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
-      if (existing) {
+      if (existing && !existing.deletedAt) {
         return res.status(400).json({ message: "Username already registered" });
+      }
+      
+      // If user was previously deleted, remove the old record to allow fresh registration
+      if (existing && existing.deletedAt) {
+        console.log("[Register] Removing previously deleted user to allow re-registration:", username);
+        await db.delete(users).where(eq(users.id, existing.id));
       }
       
       // Hash password
@@ -2456,13 +2462,14 @@ export async function registerRoutes(
     if (!await requireAdmin(req, res)) return;
     
     try {
-      const { confirm } = req.body;
+      const { confirm, includeUsers } = req.body;
       if (confirm !== "RESET_ALL_DATA") {
         return res.status(400).json({ 
           message: "Confirmation required. Send { confirm: 'RESET_ALL_DATA' } to proceed." 
         });
       }
       
+      // Clear spin/wallet data
       await db.delete(spinLogs);
       await db.delete(walletTransactions);
       await db.delete(userSpinBalances);
@@ -2473,13 +2480,36 @@ export async function registerRoutes(
       await db.delete(rateLimitLogs);
       await db.delete(guaranteedWins);
       
+      const tablesList = [
+        "spin_logs", "wallet_transactions", "user_spin_balances", 
+        "user_wallets", "withdrawal_requests", "user_state",
+        "payouts", "rate_limit_logs", "guaranteed_wins"
+      ];
+      
+      // If includeUsers is true, also delete all users and related data
+      if (includeUsers === true) {
+        await db.delete(verificationRequests);
+        await db.delete(userFlags);
+        await db.delete(sessions);
+        await db.delete(users);
+        tablesList.push("verification_requests", "user_flags", "sessions", "users");
+        
+        await logAdminActivity({
+          action: "refresh_cache",
+          targetType: "cache",
+          details: { type: "full_reset", includeUsers: true, tablesCleared: tablesList },
+          ipHash: hashForLogging(getClientIpForSecurity(req)),
+        });
+        
+        return res.json({ 
+          message: "FULL RESET COMPLETE: All users, spins, and data have been deleted.",
+          tables_cleared: tablesList
+        });
+      }
+      
       return res.json({ 
         message: "All user data has been reset successfully.",
-        tables_cleared: [
-          "spin_logs", "wallet_transactions", "user_spin_balances", 
-          "user_wallets", "withdrawal_requests", "user_state",
-          "payouts", "rate_limit_logs", "guaranteed_wins"
-        ]
+        tables_cleared: tablesList
       });
     } catch (err) {
       console.error("Data reset error:", err);

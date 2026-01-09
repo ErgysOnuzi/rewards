@@ -438,6 +438,7 @@ export default function Admin() {
   });
 
   const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const [showFullResetConfirm, setShowFullResetConfirm] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const resetData = useMutation({
     mutationFn: async () => {
@@ -457,6 +458,27 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to reset data", description: err.message, variant: "destructive" });
+    },
+  });
+  
+  const fullReset = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/reset-data", { 
+        method: "POST", 
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: "RESET_ALL_DATA", includeUsers: true })
+      });
+      if (!res.ok) throw new Error("Failed to reset");
+      return res.json();
+    },
+    onSuccess: (data) => {
+      setShowFullResetConfirm(false);
+      toast({ title: "Full Reset Complete", description: data.message });
+      queryClient.invalidateQueries();
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to reset", description: err.message, variant: "destructive" });
     },
   });
 
@@ -897,39 +919,79 @@ export default function Admin() {
                       : "You are in production mode. Reset will affect the LIVE production database."}
                   </p>
                 </div>
-                {!showResetConfirm ? (
-                  <Button 
-                    variant="destructive" 
-                    onClick={() => setShowResetConfirm(true)}
-                    data-testid="button-reset-data"
-                  >
-                    Reset All User Data
-                  </Button>
-                ) : (
-                  <div className="space-y-3 p-4 bg-destructive/10 rounded-lg">
-                    <p className="text-sm text-destructive font-medium">
-                      This will permanently delete all spin logs, wallets, withdrawals, and user data
-                      {!window.location.hostname.includes('replit.dev') && " from the PRODUCTION database"}.
-                    </p>
-                    <div className="flex gap-2 flex-wrap">
-                      <Button 
-                        variant="destructive" 
-                        onClick={() => resetData.mutate()}
-                        disabled={resetData.isPending}
-                        data-testid="button-confirm-reset"
-                      >
-                        {resetData.isPending ? "Resetting..." : "Yes, Reset Everything"}
-                      </Button>
-                      <Button 
-                        variant="outline" 
-                        onClick={() => setShowResetConfirm(false)}
-                        data-testid="button-cancel-reset"
-                      >
-                        Cancel
-                      </Button>
+                <div className="flex flex-wrap gap-2">
+                  {!showResetConfirm ? (
+                    <Button 
+                      variant="outline" 
+                      className="border-destructive text-destructive hover:bg-destructive/10"
+                      onClick={() => setShowResetConfirm(true)}
+                      data-testid="button-reset-data"
+                    >
+                      Reset Spin Data
+                    </Button>
+                  ) : (
+                    <div className="w-full space-y-3 p-4 bg-destructive/10 rounded-lg">
+                      <p className="text-sm text-destructive font-medium">
+                        This will delete all spin logs, wallets, and withdrawals (keeps user accounts)
+                        {!window.location.hostname.includes('replit.dev') && " from the PRODUCTION database"}.
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button 
+                          variant="destructive" 
+                          onClick={() => resetData.mutate()}
+                          disabled={resetData.isPending}
+                          data-testid="button-confirm-reset"
+                        >
+                          {resetData.isPending ? "Resetting..." : "Yes, Reset Spin Data"}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setShowResetConfirm(false)}
+                          data-testid="button-cancel-reset"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  )}
+                  
+                  {!showFullResetConfirm ? (
+                    <Button 
+                      variant="destructive"
+                      onClick={() => setShowFullResetConfirm(true)}
+                      data-testid="button-full-reset"
+                    >
+                      Full Reset (Delete All Users)
+                    </Button>
+                  ) : (
+                    <div className="w-full space-y-3 p-4 bg-destructive/20 rounded-lg border-2 border-destructive">
+                      <p className="text-sm text-destructive font-bold">
+                        WARNING: This will permanently DELETE ALL USERS, spins, wallets, and ALL data
+                        {!window.location.hostname.includes('replit.dev') && " from the PRODUCTION database"}!
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        Users will be able to register again after this reset.
+                      </p>
+                      <div className="flex gap-2 flex-wrap">
+                        <Button 
+                          variant="destructive" 
+                          onClick={() => fullReset.mutate()}
+                          disabled={fullReset.isPending}
+                          data-testid="button-confirm-full-reset"
+                        >
+                          {fullReset.isPending ? "Deleting Everything..." : "DELETE EVERYTHING"}
+                        </Button>
+                        <Button 
+                          variant="outline" 
+                          onClick={() => setShowFullResetConfirm(false)}
+                          data-testid="button-cancel-full-reset"
+                        >
+                          Cancel
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
