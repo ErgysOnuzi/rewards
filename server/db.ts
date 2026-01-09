@@ -54,6 +54,14 @@ export async function bootstrapDatabase(): Promise<void> {
       )
     `);
     
+    // Add missing columns to users table (for existing tables that need migration)
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS security_disclaimer_accepted BOOLEAN DEFAULT false`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stake_username VARCHAR`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS stake_platform VARCHAR`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verification_status VARCHAR DEFAULT 'unverified'`);
+    await client.query(`ALTER TABLE users ADD COLUMN IF NOT EXISTS verified_at TIMESTAMP`);
+    
     // Create verification_requests table
     await client.query(`
       CREATE TABLE IF NOT EXISTS verification_requests (
