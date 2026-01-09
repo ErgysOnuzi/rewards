@@ -26,7 +26,7 @@ import { encrypt, decrypt } from "./lib/encryption";
 import { generateToken } from "./lib/jwt";
 import { ZodError, z } from "zod";
 import { db } from "./db";
-import { eq, desc, sql, and, gte, lt } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lt, isNull } from "drizzle-orm";
 import crypto from "crypto";
 import { 
   logSecurityEvent, 
@@ -638,7 +638,7 @@ export async function registerRoutes(
         verificationStatus: users.verificationStatus,
         verifiedAt: users.verifiedAt,
         createdAt: users.createdAt,
-      }).from(users).orderBy(desc(users.createdAt));
+      }).from(users).where(isNull(users.deletedAt)).orderBy(desc(users.createdAt));
       
       // Decrypt emails for admin view
       const decryptedUsers = allUsers.map(u => ({
@@ -1596,7 +1596,7 @@ export async function registerRoutes(
       verificationStatus: users.verificationStatus,
       createdAt: users.createdAt,
       verifiedAt: users.verifiedAt,
-    }).from(users).orderBy(users.createdAt);
+    }).from(users).where(isNull(users.deletedAt)).orderBy(users.createdAt);
     
     // Decrypt emails for admin view
     const decryptedUsers = allUsers.map(u => ({
