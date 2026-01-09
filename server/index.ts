@@ -8,7 +8,7 @@ import connectPgSimple from "connect-pg-simple";
 import { startBackgroundRefresh } from "./lib/sheets";
 import { securityHeaders, csrfProtection, requestIdMiddleware } from "./lib/security";
 import { enforceSecurityRequirements } from "./lib/config";
-import { pool } from "./db";
+import { pool, bootstrapDatabase } from "./db";
 import { verifyToken } from "./lib/jwt";
 
 // Validate security requirements at startup - fail hard if missing
@@ -165,6 +165,15 @@ app.use((req, res, next) => {
 });
 
 (async () => {
+  // Bootstrap database - ensure all tables exist before accepting requests
+  // This is critical for production deployments where tables may not exist
+  try {
+    await bootstrapDatabase();
+  } catch (dbError) {
+    console.error("[FATAL] Database bootstrap failed:", dbError);
+    process.exit(1);
+  }
+  
   startBackgroundRefresh();
   
   await registerRoutes(httpServer, app);
