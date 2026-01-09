@@ -43,6 +43,8 @@ waitForPort = 5000
 
 [userenv.shared]
 GOOGLE_SHEETS_ID = "1Idr4KaCkR5EYdQPyWMqtoUNVpRUPGczLy-UCaJU4jzc"
+WEIGHTED_SHEETS_US = "1p9Ab7U0Eyjwek4JVIa86dfvl9ThCmbLUhaR4rbJ5INA"
+WEIGHTED_SHEETS_COM = "1mCyx0QPg9vd9pD5QzPSXAd58GaKDBqvgchB6yu5fwIM"
 
 [agent]
 integrations = ["google-sheet:1.0.0", "javascript_log_in_with_replit:2.0.0"]
