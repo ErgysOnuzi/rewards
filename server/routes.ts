@@ -1137,21 +1137,35 @@ export async function registerRoutes(
     }
   });
 
+  // Track demo spin counts per IP to give wins every 2-3 spins
+  const demoSpinCounts = new Map<string, number>();
+  
   // Demo spin - no login required, just for trying the experience
   app.post("/api/spin/demo", async (req: Request, res: Response) => {
     try {
       const ipHash = hashIp(req.ip || "unknown");
       
-      // Demo spin has same odds as bonus spin (1 in 500 = 0.2%)
-      const roll = Math.random();
-      const isWin = roll < 0.002;
+      // Get current spin count for this IP
+      const currentCount = demoSpinCounts.get(ipHash) || 0;
+      const newCount = currentCount + 1;
+      demoSpinCounts.set(ipHash, newCount);
+      
+      // Win on 2nd spin, then every 2-3 spins after
+      // Pattern: LOSE, WIN, LOSE, WIN, LOSE, LOSE, WIN, etc.
+      let isWin = false;
+      if (newCount === 2) {
+        isWin = true; // Always win on 2nd spin to hook them
+      } else if (newCount > 2) {
+        // After that, win roughly every 2-3 spins (40% chance)
+        isWin = Math.random() < 0.40;
+      }
       
       // Generate prize based on result
       const prize = isWin 
         ? { label: "[DEMO] $5", value: 5, color: "green" as const }
         : { label: "[DEMO] $0", value: 0, color: "grey" as const };
 
-      console.log(`[Demo Spin] IP: ${ipHash.slice(0, 8)}... Result: ${isWin ? "WIN" : "LOSE"}`);
+      console.log(`[Demo Spin] IP: ${ipHash.slice(0, 8)}... Spin #${newCount} Result: ${isWin ? "WIN" : "LOSE"}`);
 
       return res.json({
         stake_id: "demo_user",
