@@ -5,8 +5,16 @@ import TicketStatus, { TicketData, SpinBalances } from "@/components/TicketStatu
 import CaseOpening, { CaseSpinResult, BonusStatus } from "@/components/CaseOpening";
 import Footer from "@/components/Footer";
 import { useToast } from "@/hooks/use-toast";
-import { safeJsonParse } from "@/lib/queryClient";
+import { safeJsonParse, getAuthToken } from "@/lib/queryClient";
 import { useAuth } from "@/hooks/use-auth";
+
+function getAuthHeaders(): HeadersInit {
+  const token = getAuthToken();
+  return {
+    "Content-Type": "application/json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+}
 import { useLocation } from "wouter";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,7 +43,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/spin/bonus/check", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({}),
       });
@@ -58,7 +66,8 @@ export default function Home() {
     try {
       const response = await fetch("/api/lookup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
+        credentials: "include",
         body: JSON.stringify({ stake_id: stakeId, domain }),
       });
 
@@ -114,7 +123,8 @@ export default function Home() {
 
     const response = await fetch("/api/spin", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
+      credentials: "include",
       body: JSON.stringify({ stake_id: ticketData.stakeId }),
     });
 
@@ -174,7 +184,7 @@ export default function Home() {
 
     const response = await fetch("/api/spin/bonus", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: getAuthHeaders(),
       credentials: "include",
       body: JSON.stringify({}),
     });
@@ -209,7 +219,7 @@ export default function Home() {
     try {
       const response = await fetch("/api/wallet/withdraw", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getAuthHeaders(),
         credentials: "include",
         body: JSON.stringify({ amount }),
       });
