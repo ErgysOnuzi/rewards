@@ -201,12 +201,21 @@ export async function registerRoutes(
   // Register new user - username must exist in the appropriate spreadsheet
   app.post("/api/auth/register", async (req: Request, res: Response) => {
     try {
+      console.log("[Register] Request received:", {
+        hasBody: !!req.body,
+        origin: req.headers.origin,
+      });
+      
       const parsed = registerSchema.parse(req.body);
       const { username, password, email, stakePlatform } = parsed;
+      
+      console.log("[Register] Attempting registration for:", username, "platform:", stakePlatform);
       
       // Validate username exists in the appropriate spreadsheet
       const { usernameExistsInSpreadsheet } = await import("./lib/sheets");
       const existsInSheet = usernameExistsInSpreadsheet(username, stakePlatform);
+      console.log("[Register] Username exists in sheet:", existsInSheet);
+      
       if (!existsInSheet) {
         return res.status(400).json({ 
           message: `Username "${username}" not found in ${stakePlatform === "us" ? "Stake.us" : "Stake.com"} records. Please use your Stake username.` 
@@ -278,7 +287,12 @@ export async function registerRoutes(
       if (err instanceof ZodError) {
         return res.status(400).json({ message: err.errors[0]?.message || "Invalid request" });
       }
-      console.error("Registration error:", err);
+      // Log detailed error info for debugging
+      console.error("Registration error:", {
+        message: err instanceof Error ? err.message : String(err),
+        stack: err instanceof Error ? err.stack : undefined,
+        name: err instanceof Error ? err.name : typeof err,
+      });
       return res.status(500).json({ message: "Registration failed" });
     }
   });
