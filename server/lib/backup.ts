@@ -1,12 +1,8 @@
-import { exec } from "child_process";
-import { promisify } from "util";
 import * as fs from "fs";
 import * as path from "path";
-import { db } from "../db";
+import { db, pool } from "../db";
 import { backupLogs } from "@shared/schema";
 import { desc, lt } from "drizzle-orm";
-
-const execAsync = promisify(exec);
 
 const BACKUP_DIR = "./backups";
 const MAX_BACKUP_AGE_DAYS = 7;
@@ -48,9 +44,66 @@ async function cleanupOldBackups(): Promise<number> {
   }
 
   const cutoffDate = new Date(now - maxAge);
-  await db.delete(backupLogs).where(lt(backupLogs.createdAt, cutoffDate));
+  try {
+    await db.delete(backupLogs).where(lt(backupLogs.createdAt, cutoffDate));
+  } catch (e) {
+    console.log("[Backup] Could not clean backup_logs:", e);
+  }
 
   return deletedCount;
+}
+
+const TABLES_TO_BACKUP = [
+  "users",
+  "verification_requests", 
+  "spin_logs",
+  "user_wallets",
+  "user_spin_balances",
+  "withdrawal_requests",
+  "wallet_transactions",
+  "user_flags",
+  "admin_sessions",
+  "admin_credentials",
+  "export_logs",
+  "feature_toggles",
+  "payouts",
+  "rate_limit_logs",
+  "user_state",
+  "wager_overrides",
+  "guaranteed_wins",
+  "demo_users",
+  "admin_activity_logs",
+  "backup_logs"
+];
+
+async function exportTableToSQL(client: any, tableName: string): Promise<string> {
+  try {
+    const result = await client.query(`SELECT * FROM ${tableName}`);
+    if (result.rows.length === 0) {
+      return `-- Table ${tableName}: 0 rows\n`;
+    }
+
+    const columns = Object.keys(result.rows[0]);
+    let sql = `-- Table ${tableName}: ${result.rows.length} rows\n`;
+    sql += `DELETE FROM ${tableName};\n`;
+
+    for (const row of result.rows) {
+      const values = columns.map(col => {
+        const val = row[col];
+        if (val === null) return "NULL";
+        if (typeof val === "boolean") return val ? "TRUE" : "FALSE";
+        if (typeof val === "number") return String(val);
+        if (val instanceof Date) return `'${val.toISOString()}'`;
+        const escaped = String(val).replace(/'/g, "''");
+        return `'${escaped}'`;
+      });
+      sql += `INSERT INTO ${tableName} (${columns.join(", ")}) VALUES (${values.join(", ")});\n`;
+    }
+
+    return sql + "\n";
+  } catch (error) {
+    return `-- Table ${tableName}: Error exporting - ${error}\n`;
+  }
 }
 
 export async function createBackup(manual: boolean = false): Promise<{ success: boolean; filename?: string; error?: string }> {
@@ -59,32 +112,35 @@ export async function createBackup(manual: boolean = false): Promise<{ success: 
   const filename = getBackupFilename();
   const filepath = path.join(BACKUP_DIR, filename);
   
-  const databaseUrl = process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    const error = "DATABASE_URL not configured";
-    console.error("[Backup] Failed:", error);
-    await db.insert(backupLogs).values({
-      filename,
-      status: "failed",
-      errorMessage: error,
-    });
-    return { success: false, error };
-  }
-
+  const client = await pool.connect();
+  
   try {
-    const command = `pg_dump "${databaseUrl}" --no-owner --no-acl -f "${filepath}"`;
-    await execAsync(command, { timeout: 300000 });
+    await client.query("SET search_path TO public");
     
+    let sqlContent = `-- LukeRewards Database Backup\n`;
+    sqlContent += `-- Created: ${new Date().toISOString()}\n`;
+    sqlContent += `-- Type: ${manual ? "Manual" : "Scheduled"}\n\n`;
+    sqlContent += `SET search_path TO public;\n\n`;
+
+    for (const table of TABLES_TO_BACKUP) {
+      sqlContent += await exportTableToSQL(client, table);
+    }
+
+    fs.writeFileSync(filepath, sqlContent, "utf8");
     const stats = fs.statSync(filepath);
     const sizeBytes = stats.size;
     
-    await db.insert(backupLogs).values({
-      filename,
-      sizeBytes,
-      status: "success",
-    });
+    try {
+      await db.insert(backupLogs).values({
+        filename,
+        sizeBytes,
+        status: "success",
+      });
+    } catch (e) {
+      console.log("[Backup] Could not log to backup_logs table");
+    }
     
-    console.log(`[Backup] ${manual ? "Manual" : "Scheduled"} backup created: ${filename} (${(sizeBytes / 1024 / 1024).toFixed(2)} MB)`);
+    console.log(`[Backup] ${manual ? "Manual" : "Scheduled"} backup created: ${filename} (${(sizeBytes / 1024).toFixed(2)} KB)`);
     
     const deletedCount = await cleanupOldBackups();
     if (deletedCount > 0) {
@@ -96,13 +152,19 @@ export async function createBackup(manual: boolean = false): Promise<{ success: 
     const errorMessage = error instanceof Error ? error.message : String(error);
     console.error("[Backup] Failed:", errorMessage);
     
-    await db.insert(backupLogs).values({
-      filename,
-      status: "failed",
-      errorMessage,
-    });
+    try {
+      await db.insert(backupLogs).values({
+        filename,
+        status: "failed",
+        errorMessage,
+      });
+    } catch (e) {
+      console.log("[Backup] Could not log failure to backup_logs table");
+    }
     
     return { success: false, error: errorMessage };
+  } finally {
+    client.release();
   }
 }
 
@@ -140,11 +202,24 @@ export async function getBackupStatus(): Promise<{
   lastBackup: { filename: string; createdAt: Date; sizeBytes: number | null } | null;
   recentBackups: Array<{ filename: string; createdAt: Date; status: string; sizeBytes: number | null }>;
 }> {
-  const recentBackups = await db
-    .select()
-    .from(backupLogs)
-    .orderBy(desc(backupLogs.createdAt))
-    .limit(10);
+  let recentBackups: Array<{ filename: string; createdAt: Date; status: string; sizeBytes: number | null }> = [];
+  
+  try {
+    const logs = await db
+      .select()
+      .from(backupLogs)
+      .orderBy(desc(backupLogs.createdAt))
+      .limit(10);
+    
+    recentBackups = logs.map(b => ({
+      filename: b.filename,
+      createdAt: b.createdAt,
+      status: b.status,
+      sizeBytes: b.sizeBytes,
+    }));
+  } catch (e) {
+    console.log("[Backup] Could not fetch backup logs from database");
+  }
 
   let backupCount = 0;
   try {
@@ -164,12 +239,7 @@ export async function getBackupStatus(): Promise<{
       createdAt: lastSuccessful.createdAt,
       sizeBytes: lastSuccessful.sizeBytes,
     } : null,
-    recentBackups: recentBackups.map(b => ({
-      filename: b.filename,
-      createdAt: b.createdAt,
-      status: b.status,
-      sizeBytes: b.sizeBytes,
-    })),
+    recentBackups,
   };
 }
 
