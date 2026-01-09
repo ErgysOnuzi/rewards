@@ -286,11 +286,20 @@ export async function registerRoutes(
   // Login
   app.post("/api/auth/login", async (req: Request, res: Response) => {
     try {
+      console.log("[Login] Request received:", {
+        hasBody: !!req.body,
+        origin: req.headers.origin,
+        referer: req.headers.referer?.substring(0, 50),
+      });
+      
       const parsed = loginSchema.parse(req.body);
       const { username, password } = parsed;
       
+      console.log("[Login] Attempting login for:", username);
+      
       // Find user
       const [user] = await db.select().from(users).where(eq(users.username, username.toLowerCase()));
+      console.log("[Login] User found:", !!user);
       if (!user) {
         logSecurityEvent({
           type: "auth_failure",
