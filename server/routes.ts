@@ -198,6 +198,30 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
   
+  // =================== DEBUG ENDPOINTS ===================
+  
+  // Debug endpoint to check if a username exists in sheets (development only)
+  app.get("/api/debug/check-username/:username", async (req: Request, res: Response) => {
+    if (process.env.NODE_ENV === "production") {
+      return res.status(404).json({ message: "Not found" });
+    }
+    
+    const { username } = req.params;
+    const { usernameExistsInSpreadsheet, getWagerRow, getWeightedWagerWithDomain } = await import("./lib/sheets");
+    
+    const normalizedUsername = username.toLowerCase().trim();
+    const existsInSheet = usernameExistsInSpreadsheet(normalizedUsername);
+    const ngrData = await getWagerRow(normalizedUsername);
+    const weightedData = getWeightedWagerWithDomain(normalizedUsername);
+    
+    res.json({
+      username: normalizedUsername,
+      existsInAnySheet: existsInSheet,
+      ngrSheet: ngrData ? { found: true, wageredAmount: ngrData.wageredAmount } : { found: false },
+      weighted: weightedData.wager > 0 ? { found: true, wagered: weightedData.wager, domain: weightedData.domain } : { found: false },
+    });
+  });
+  
   // =================== CUSTOM AUTHENTICATION ===================
   
   // Register new user - username must exist in the appropriate spreadsheet
