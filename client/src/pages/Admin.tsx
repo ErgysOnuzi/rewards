@@ -372,10 +372,10 @@ export default function Admin() {
 
   // Backup status query
   const { data: backupStatus, refetch: refetchBackups } = useQuery<{ 
-    lastBackup: string | null;
+    lastBackup: { filename: string; createdAt: string; sizeBytes: number | null } | null;
     backupCount: number;
     nextScheduled: string | null;
-    files: { name: string; size: number; created: string }[];
+    files: { filename: string; sizeBytes: number; createdAt: string }[];
   }>({
     queryKey: ["/api/admin/backup-status"],
     enabled: isAuthenticated === true,
@@ -2152,7 +2152,7 @@ export default function Admin() {
                   <div className="grid sm:grid-cols-2 gap-4 text-sm">
                     <div>
                       <span className="text-muted-foreground">Last Backup:</span>{" "}
-                      {backupStatus?.lastBackup ? formatDate(backupStatus.lastBackup) : "Never"}
+                      {backupStatus?.lastBackup?.createdAt ? formatDate(backupStatus.lastBackup.createdAt) : "Never"}
                     </div>
                     <div>
                       <span className="text-muted-foreground">Total Backups:</span>{" "}
@@ -2171,21 +2171,21 @@ export default function Admin() {
                         </tr>
                       </thead>
                       <tbody>
-                        {backupStatus?.files?.map((file) => (
-                          <tr key={file.name} className="border-b hover:bg-muted/30">
-                            <td className="py-2 px-3 font-mono text-xs">{file.name}</td>
-                            <td className="py-2 px-3 text-right">{(file.size / 1024).toFixed(1)} KB</td>
+                        {backupStatus?.files?.map((file: { filename: string; sizeBytes: number; createdAt: string }) => (
+                          <tr key={file.filename} className="border-b hover:bg-muted/30">
+                            <td className="py-2 px-3 font-mono text-xs">{file.filename}</td>
+                            <td className="py-2 px-3 text-right">{(file.sizeBytes / 1024).toFixed(1)} KB</td>
                             <td className="py-2 px-3 text-right text-muted-foreground">
-                              {formatDate(file.created)}
+                              {formatDate(file.createdAt)}
                             </td>
                             <td className="py-2 px-3 text-right">
                               <Button
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => {
-                                  window.open(`/api/admin/backup/download/${file.name}`, '_blank');
+                                  window.open(`/api/admin/backup/download/${file.filename}`, '_blank');
                                 }}
-                                data-testid={`button-download-${file.name}`}
+                                data-testid={`button-download-${file.filename}`}
                               >
                                 <Download className="w-4 h-4" />
                               </Button>
