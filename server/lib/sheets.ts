@@ -260,12 +260,13 @@ export function getAllWeightedUsers(domain: "us" | "com"): Array<{ stakeId: stri
   })).sort((a, b) => b.wagered - a.wagered);
 }
 
-// Check if a username exists in the weighted sheets (checks BOTH sheets)
+// Check if a username exists in ANY sheet (NGR sheet OR weighted sheets)
 export function usernameExistsInSpreadsheet(username: string, _domain?: "us" | "com"): boolean {
   const normalizedUsername = username.toLowerCase().trim();
+  const inNgr = wagerDataCache?.has(normalizedUsername) || false;
   const inUs = weightedDataCacheUs?.has(normalizedUsername) || false;
   const inCom = weightedDataCacheCom?.has(normalizedUsername) || false;
-  return inUs || inCom;
+  return inNgr || inUs || inCom;
 }
 
 // Find column index by header name (case-insensitive)
