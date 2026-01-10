@@ -174,6 +174,23 @@ interface VerificationQueuesData {
   pendingRequests: (VerificationRequest & { username: string | null })[];
 }
 
+interface AdminActivityLog {
+  id: number;
+  action: string;
+  targetType: string | null;
+  targetId: string | null;
+  details: Record<string, unknown> | null;
+  ipHash: string | null;
+  createdAt: string;
+}
+
+interface ActivityLogsResponse {
+  logs: AdminActivityLog[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
 function AdminLogin({ onLogin }: { onLogin: () => void }) {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -378,6 +395,12 @@ export default function Admin() {
     files: { filename: string; sizeBytes: number; createdAt: string }[];
   }>({
     queryKey: ["/api/admin/backup-status"],
+    enabled: isAuthenticated === true,
+  });
+
+  // Activity logs query
+  const { data: activityLogsData, refetch: refetchActivityLogs } = useQuery<ActivityLogsResponse>({
+    queryKey: ["/api/admin/activity-logs"],
     enabled: isAuthenticated === true,
   });
 
@@ -786,6 +809,9 @@ export default function Admin() {
               </TabsTrigger>
               <TabsTrigger value="backups" data-testid="tab-backups" className="text-xs sm:text-sm">
                 <FileDown className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Backups</span>
+              </TabsTrigger>
+              <TabsTrigger value="activity" data-testid="tab-activity" className="text-xs sm:text-sm">
+                <Activity className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Activity</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2196,6 +2222,96 @@ export default function Admin() {
                           <tr>
                             <td colSpan={4} className="text-center py-8 text-muted-foreground">
                               No backup files found
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Activity Logs Tab */}
+          <TabsContent value="activity" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Activity className="w-5 h-5" />
+                    Admin Activity Logs
+                  </CardTitle>
+                  <CardDescription>
+                    All admin actions are logged here for security auditing
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => refetchActivityLogs()} 
+                  variant="outline" 
+                  size="sm"
+                  data-testid="button-refresh-activity"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  <div className="text-sm text-muted-foreground">
+                    Total logs: {activityLogsData?.total || 0}
+                  </div>
+                  
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full text-sm">
+                      <thead className="bg-muted/50">
+                        <tr className="border-b">
+                          <th className="text-left py-2 px-3">Time</th>
+                          <th className="text-left py-2 px-3">Action</th>
+                          <th className="text-left py-2 px-3">Target</th>
+                          <th className="text-left py-2 px-3">Details</th>
+                          <th className="text-left py-2 px-3">IP Hash</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {activityLogsData?.logs?.map((log) => (
+                          <tr key={log.id} className="border-b hover:bg-muted/30">
+                            <td className="py-2 px-3 text-muted-foreground whitespace-nowrap">
+                              {formatDate(log.createdAt)}
+                            </td>
+                            <td className="py-2 px-3">
+                              <Badge variant={
+                                log.action.includes('approve') ? 'default' :
+                                log.action.includes('reject') ? 'destructive' :
+                                log.action.includes('login') ? 'secondary' :
+                                'outline'
+                              }>
+                                {log.action}
+                              </Badge>
+                            </td>
+                            <td className="py-2 px-3">
+                              {log.targetType && (
+                                <span className="text-muted-foreground">
+                                  {log.targetType}{log.targetId ? `: ${log.targetId}` : ''}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 max-w-xs truncate">
+                              {log.details && (
+                                <span className="text-xs text-muted-foreground font-mono">
+                                  {JSON.stringify(log.details)}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
+                              {log.ipHash?.substring(0, 12)}...
+                            </td>
+                          </tr>
+                        ))}
+                        {(!activityLogsData?.logs || activityLogsData.logs.length === 0) && (
+                          <tr>
+                            <td colSpan={5} className="text-center py-8 text-muted-foreground">
+                              No activity logs found
                             </td>
                           </tr>
                         )}
