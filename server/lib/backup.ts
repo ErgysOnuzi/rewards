@@ -6,6 +6,7 @@ import { desc, lt } from "drizzle-orm";
 
 const BACKUP_DIR = "./backups";
 const MAX_BACKUP_AGE_DAYS = 7;
+const MAX_BACKUP_FILES = 14;
 const BACKUP_INTERVAL_MS = 12 * 60 * 60 * 1000;
 
 let backupIntervalId: NodeJS.Timeout | null = null;
@@ -24,14 +25,13 @@ function getBackupFilename(): string {
 }
 
 async function cleanupOldBackups(): Promise<number> {
-  const files = fs.readdirSync(BACKUP_DIR);
+  const files = fs.readdirSync(BACKUP_DIR).filter(f => f.endsWith(".sql"));
   const now = Date.now();
   const maxAge = MAX_BACKUP_AGE_DAYS * 24 * 60 * 60 * 1000;
   let deletedCount = 0;
 
+  // Delete files older than max age
   for (const file of files) {
-    if (!file.endsWith(".sql")) continue;
-    
     const filePath = path.join(BACKUP_DIR, file);
     const stats = fs.statSync(filePath);
     const age = now - stats.mtime.getTime();
@@ -40,6 +40,25 @@ async function cleanupOldBackups(): Promise<number> {
       fs.unlinkSync(filePath);
       deletedCount++;
       console.log("[Backup] Deleted old backup:", file);
+    }
+  }
+
+  // Also enforce max file count (keep only newest 14)
+  const remainingFiles = fs.readdirSync(BACKUP_DIR)
+    .filter(f => f.endsWith(".sql"))
+    .map(f => ({
+      name: f,
+      path: path.join(BACKUP_DIR, f),
+      mtime: fs.statSync(path.join(BACKUP_DIR, f)).mtime.getTime()
+    }))
+    .sort((a, b) => b.mtime - a.mtime); // newest first
+
+  if (remainingFiles.length > MAX_BACKUP_FILES) {
+    const toDelete = remainingFiles.slice(MAX_BACKUP_FILES);
+    for (const file of toDelete) {
+      fs.unlinkSync(file.path);
+      deletedCount++;
+      console.log("[Backup] Deleted excess backup:", file.name);
     }
   }
 
