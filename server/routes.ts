@@ -250,7 +250,7 @@ export async function registerRoutes(
       });
       
       const parsed = registerSchema.parse(req.body);
-      const { username, password, email, stakePlatform, referralCode: inputReferralCode } = parsed;
+      const { username, password, email, stakePlatform, referralCode: inputReferrer } = parsed;
       
       console.log("[Register] Attempting registration for:", username, "platform:", stakePlatform);
       
@@ -291,13 +291,15 @@ export async function registerRoutes(
       
       // Look up referrer if referral code was provided
       let referrerId: string | null = null;
-      if (inputReferralCode) {
-        const [referrer] = await db.select().from(users).where(eq(users.referralCode, inputReferralCode.toUpperCase()));
+      if (inputReferrer) {
+        // Look up referrer by username (case-insensitive)
+        const [referrer] = await db.select().from(users)
+          .where(sql`LOWER(${users.username}) = LOWER(${inputReferrer})`);
         if (referrer && !referrer.deletedAt) {
           referrerId = referrer.id;
-          console.log(`[Register] User referred by: ${referrer.username} (code: ${inputReferralCode})`);
+          console.log(`[Register] User referred by: ${referrer.username}`);
         } else {
-          console.log(`[Register] Invalid referral code provided: ${inputReferralCode}`);
+          console.log(`[Register] Invalid referrer username provided: ${inputReferrer}`);
         }
       }
       
@@ -318,7 +320,7 @@ export async function registerRoutes(
         await db.insert(referrals).values({
           referrerUserId: referrerId,
           referredUserId: newUser.id,
-          referralCode: inputReferralCode!.toUpperCase(),
+          referralCode: inputReferrer!, // Store the referrer username
           status: "pending",
         });
         console.log(`[Register] Referral record created for user ${newUser.username}`);

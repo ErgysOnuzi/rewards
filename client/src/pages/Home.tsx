@@ -32,9 +32,9 @@ export default function Home() {
   const [, navigate] = useLocation();
   
   const copyReferralLink = () => {
-    const referralCode = user?.referralCode;
-    if (!referralCode) return;
-    const referralLink = `${window.location.origin}/register?ref=${referralCode}`;
+    const username = user?.username;
+    if (!username) return;
+    const referralLink = `${window.location.origin}/register?ref=${username}`;
     navigator.clipboard.writeText(referralLink);
     setCopied(true);
     toast({ title: "Copied!", description: "Referral link copied to clipboard" });
@@ -397,7 +397,7 @@ export default function Home() {
                 onBonusUsed={handleBonusUsed}
               />
               
-              {user?.referralCode && (
+              {user?.username && (
                 <Card className="max-w-md mx-auto">
                   <CardHeader className="pb-3">
                     <CardTitle className="flex items-center gap-2 text-base">
@@ -407,11 +407,11 @@ export default function Home() {
                   </CardHeader>
                   <CardContent className="space-y-3">
                     <p className="text-sm text-muted-foreground">
-                      Share your referral code with friends. When they hit $1,000 weekly wager, you'll earn $2!
+                      Tell your friends to enter your username when signing up. When they hit $1,000 weekly wager, you'll earn $2!
                     </p>
                     <div className="flex items-center gap-2">
                       <div className="flex-1 bg-muted p-2 rounded-md font-mono text-center text-sm">
-                        {user.referralCode}
+                        {user.username}
                       </div>
                       <Button 
                         size="icon" 

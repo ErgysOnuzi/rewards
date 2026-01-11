@@ -21,14 +21,14 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [email, setEmail] = useState("");
   const [stakePlatform, setStakePlatform] = useState<"us" | "com" | "">("");
-  const [referralCode, setReferralCode] = useState("");
+  const [referredBy, setReferredBy] = useState("");
   
-  // Read referral code from URL params on mount
+  // Read referrer username from URL params on mount
   useEffect(() => {
     const params = new URLSearchParams(searchString);
-    const refCode = params.get("ref") || params.get("referral");
-    if (refCode) {
-      setReferralCode(refCode.toUpperCase());
+    const referrer = params.get("ref") || params.get("referral");
+    if (referrer) {
+      setReferredBy(referrer);
     }
   }, [searchString]);
 
@@ -78,7 +78,7 @@ export default function Register() {
     }
 
     try {
-      await registerAsync({ username, password, email, stakePlatform, referralCode: referralCode || undefined });
+      await registerAsync({ username, password, email, stakePlatform, referralCode: referredBy || undefined });
       toast({
         title: "Account Created!",
         description: "Welcome! Please complete verification to start spinning.",
@@ -174,22 +174,21 @@ export default function Register() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="referralCode" className="flex items-center gap-1">
+              <Label htmlFor="referredBy" className="flex items-center gap-1">
                 <Gift className="w-3 h-3" />
-                Referral Code (optional)
+                Referred By (optional)
               </Label>
               <Input
-                id="referralCode"
+                id="referredBy"
                 type="text"
-                placeholder="Enter referral code"
-                value={referralCode}
-                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                placeholder="Enter referrer's username"
+                value={referredBy}
+                onChange={(e) => setReferredBy(e.target.value)}
                 disabled={isRegistering}
-                data-testid="input-referral-code"
-                className="uppercase"
+                data-testid="input-referred-by"
               />
               <p className="text-xs text-muted-foreground">
-                Have a friend's referral code? Enter it here for bonus rewards
+                Were you referred by a friend? Enter their username here
               </p>
             </div>
             <Button
