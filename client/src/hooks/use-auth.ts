@@ -46,6 +46,7 @@ interface RegisterParams {
   password: string;
   email: string;
   stakePlatform: "us" | "com";
+  referralCode?: string;
 }
 
 export function useAuth() {

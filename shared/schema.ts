@@ -197,6 +197,18 @@ export const rateLimitLogs = pgTable("rate_limit_logs", {
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
 
+// Referral system - track who referred whom and bonus status
+export const referrals = pgTable("referrals", {
+  id: serial("id").primaryKey(),
+  referrerUserId: text("referrer_user_id").notNull(), // User who shared the code
+  referredUserId: text("referred_user_id").notNull(), // User who used the code
+  referralCode: text("referral_code").notNull(), // The code that was used
+  status: text("status").default("pending").notNull(), // "pending", "qualified", "rewarded"
+  bonusAwarded: integer("bonus_awarded").default(0).notNull(), // Amount awarded to referrer
+  qualifiedAt: timestamp("qualified_at"), // When referred user hit $1k weekly wager
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+
 // User state for tracking daily bonus and cooldowns
 export const userState = pgTable("user_state", {
   id: serial("id").primaryKey(),
@@ -343,6 +355,7 @@ export type ProcessWithdrawalRequest = z.infer<typeof processWithdrawalSchema>;
 export interface WagerRow {
   stakeId: string;
   wageredAmount: number;
+  wageredWeekly?: number;
   periodLabel?: string;
   updatedAt?: string;
 }
@@ -374,6 +387,7 @@ export interface LookupResponse {
   period_label?: string;
   wagered_amount: number;        // From weighted sheets (2026) - used for ticket calculation
   lifetime_wagered: number;      // From NGR sheet - for display only
+  weekly_wager?: number;         // Weekly wager from NGR sheet - for bonus eligibility
   tickets_total: number;
   tickets_used: number;
   tickets_remaining: number;
@@ -382,6 +396,7 @@ export interface LookupResponse {
   pending_withdrawals: number;
   can_daily_bonus: boolean;      // Whether daily bonus spin is available
   next_bonus_at?: string;        // ISO timestamp when next bonus is available
+  bonus_wager_met?: boolean;     // Whether user meets $1,000/week wager for bonus
 }
 
 export interface SpinResponse {

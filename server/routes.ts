@@ -8,7 +8,7 @@ import {
   userFlags, adminSessions, adminCredentials, exportLogs, featureToggles, payouts, rateLimitLogs, userState, guaranteedWins,
   wagerOverrides, passwordResetTokens, sessions,
   CASE_PRIZES, selectCasePrize, validatePrizeProbabilities, type CasePrize, type SpinBalances,
-  users, verificationRequests, registerSchema, loginSchema
+  users, verificationRequests, registerSchema, loginSchema, referrals
 } from "@shared/schema";
 import bcrypt from "bcrypt";
 import multer from "multer";
@@ -250,7 +250,7 @@ export async function registerRoutes(
       });
       
       const parsed = registerSchema.parse(req.body);
-      const { username, password, email, stakePlatform } = parsed;
+      const { username, password, email, stakePlatform, referralCode: inputReferralCode } = parsed;
       
       console.log("[Register] Attempting registration for:", username, "platform:", stakePlatform);
       
@@ -283,6 +283,24 @@ export async function registerRoutes(
       // Encrypt sensitive data before storage
       const encryptedEmail = encrypt(email);
       
+      // Generate unique referral code for new user (8 chars alphanumeric)
+      const generateReferralCode = (): string => {
+        return crypto.randomBytes(4).toString("hex").toUpperCase();
+      };
+      const newReferralCode = generateReferralCode();
+      
+      // Look up referrer if referral code was provided
+      let referrerId: string | null = null;
+      if (inputReferralCode) {
+        const [referrer] = await db.select().from(users).where(eq(users.referralCode, inputReferralCode.toUpperCase()));
+        if (referrer && !referrer.deletedAt) {
+          referrerId = referrer.id;
+          console.log(`[Register] User referred by: ${referrer.username} (code: ${inputReferralCode})`);
+        } else {
+          console.log(`[Register] Invalid referral code provided: ${inputReferralCode}`);
+        }
+      }
+      
       // Create user with stake info pre-filled (still needs verification)
       const [newUser] = await db.insert(users).values({
         username: username.toLowerCase(),
@@ -291,7 +309,20 @@ export async function registerRoutes(
         stakeUsername: username.toLowerCase(),
         stakePlatform,
         verificationStatus: "unverified",
+        referralCode: newReferralCode,
+        referredBy: referrerId,
       }).returning();
+      
+      // Create referral record if user was referred
+      if (referrerId) {
+        await db.insert(referrals).values({
+          referrerUserId: referrerId,
+          referredUserId: newUser.id,
+          referralCode: inputReferralCode!.toUpperCase(),
+          status: "pending",
+        });
+        console.log(`[Register] Referral record created for user ${newUser.username}`);
+      }
       
       // Set session (best effort - may fail in iframe contexts)
       (req.session as any).userId = newUser.id;
@@ -333,6 +364,7 @@ export async function registerRoutes(
           username: newUser.username,
           verificationStatus: newUser.verificationStatus,
           stakePlatform: newUser.stakePlatform,
+          referralCode: newUser.referralCode,
         },
       });
     } catch (err) {
@@ -472,6 +504,7 @@ export async function registerRoutes(
           stakePlatform: user.stakePlatform,
           verificationStatus: user.verificationStatus,
           securityDisclaimerAccepted: user.securityDisclaimerAccepted,
+          referralCode: user.referralCode,
         },
       });
     } catch (err) {
@@ -551,6 +584,7 @@ export async function registerRoutes(
           stakePlatform: user.stakePlatform,
           verificationStatus: user.verificationStatus,
           securityDisclaimerAccepted: user.securityDisclaimerAccepted,
+          referralCode: user.referralCode,
         },
         ...(newToken && { token: newToken }),
       });
@@ -762,6 +796,100 @@ export async function registerRoutes(
     }
     return { canUse: false, nextBonusAt: nextBonus };
   }
+  
+  // Check and award referral bonus when referred user hits $1k weekly wager
+  const REFERRAL_BONUS_AMOUNT = 200; // $2 in cents
+  async function checkAndAwardReferralBonus(userId: string, weeklyWager: number): Promise<boolean> {
+    const MIN_WEEKLY_WAGER_FOR_REFERRAL = 1000;
+    
+    // Only check if weekly wager meets threshold
+    if (weeklyWager < MIN_WEEKLY_WAGER_FOR_REFERRAL) {
+      return false;
+    }
+    
+    // Find pending referral where this user is the referred user
+    const [pendingReferral] = await db.select().from(referrals)
+      .where(and(
+        eq(referrals.referredUserId, userId),
+        eq(referrals.status, "pending")
+      ));
+    
+    if (!pendingReferral) {
+      return false;
+    }
+    
+    // Get the referrer's stake username for wallet credit
+    const [referrer] = await db.select().from(users).where(eq(users.id, pendingReferral.referrerUserId));
+    if (!referrer) {
+      console.error(`[Referral] Referrer not found: ${pendingReferral.referrerUserId}`);
+      return false;
+    }
+    
+    // Referrer must have a stake username to receive wallet credit
+    // Keep as pending so bonus can be awarded once referrer links their Stake account
+    if (!referrer.stakeUsername) {
+      console.log(`[Referral] Referrer ${referrer.username} has no stake username yet, keeping as pending for later processing`);
+      return false;
+    }
+    
+    // Use atomic status update to prevent race conditions
+    // Update status FIRST, checking that it's still "pending" (atomic check-and-set)
+    // Use .returning() to check if any rows were actually updated
+    const updateResult = await db.update(referrals)
+      .set({ 
+        status: "processing",
+      })
+      .where(and(eq(referrals.id, pendingReferral.id), eq(referrals.status, "pending")))
+      .returning({ id: referrals.id });
+    
+    // If no rows updated, another process already started processing
+    if (!updateResult || updateResult.length === 0) {
+      console.log(`[Referral] Referral ${pendingReferral.id} already being processed`);
+      return false;
+    }
+    
+    try {
+      // Award bonus to referrer's wallet
+      const referrerStakeId = referrer.stakeUsername.toLowerCase();
+      await db.insert(userWallets).values({
+        stakeId: referrerStakeId,
+        balance: REFERRAL_BONUS_AMOUNT,
+      }).onConflictDoUpdate({
+        target: userWallets.stakeId,
+        set: { 
+          balance: sql`${userWallets.balance} + ${REFERRAL_BONUS_AMOUNT}`,
+          updatedAt: new Date(),
+        },
+      });
+      
+      // Log the transaction
+      await db.insert(walletTransactions).values({
+        stakeId: referrerStakeId,
+        type: "referral_bonus",
+        amount: REFERRAL_BONUS_AMOUNT,
+        description: `Referral bonus for referring a new user`,
+      });
+      
+      // Mark as qualified with bonus awarded
+      await db.update(referrals)
+        .set({ 
+          status: "qualified",
+          bonusAwarded: REFERRAL_BONUS_AMOUNT,
+          qualifiedAt: new Date(),
+        })
+        .where(eq(referrals.id, pendingReferral.id));
+      
+      console.log(`[Referral] Awarded $${REFERRAL_BONUS_AMOUNT / 100} to ${referrerStakeId} for referral`);
+      return true;
+    } catch (err) {
+      // If wallet credit fails, revert status back to pending so it can be retried
+      console.error(`[Referral] Failed to award bonus for referral ${pendingReferral.id}:`, err);
+      await db.update(referrals)
+        .set({ status: "pending" })
+        .where(eq(referrals.id, pendingReferral.id));
+      return false;
+    }
+  }
 
   app.post("/api/lookup", async (req: Request, res: Response) => {
     try {
@@ -802,10 +930,14 @@ export async function registerRoutes(
       // User exists if they have a database override OR are in any Google Sheet
       const hasDbOverride = override !== null;
       
+      let weeklyWager = 0;
+      const MIN_WEEKLY_WAGER = 1000;
+      
       if (hasDbOverride) {
         // User exists in database - use override values (or 0 if not set)
         lifetimeWagered = override.lifetimeWagered ?? 0;
         weightedWager = override.yearToDateWagered ?? 0;
+        weeklyWager = MIN_WEEKLY_WAGER; // Admin-added users automatically meet requirement
         console.log(`[Lookup] Using database override for ${stakeId}: lifetime=${lifetimeWagered}, ytd=${weightedWager}`);
       } else {
         // Fall back to Google Sheets data
@@ -826,6 +958,7 @@ export async function registerRoutes(
         
         // NGR sheet = lifetime wagered (for display only)
         lifetimeWagered = wagerRow?.wageredAmount ?? 0;
+        weeklyWager = wagerRow?.wageredWeekly ?? 0;
         periodLabel = wagerRow?.periodLabel || "2026";
       }
       
@@ -833,26 +966,34 @@ export async function registerRoutes(
       const ticketsUsed = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
       
+      // Check and award referral bonus if user qualifies (runs in background)
+      checkAndAwardReferralBonus(userId, weeklyWager).catch(err => {
+        console.error("[Referral] Error checking referral bonus:", err);
+      });
+      
       const walletBalance = await getWalletBalance(stakeId);
       const spinBalances = await getSpinBalances(stakeId);
       const pendingWithdrawals = await getPendingWithdrawals(stakeId);
       
       // Check daily bonus availability
       const bonusStatus = await canUseDailyBonus(stakeId);
+      const bonusWagerMet = weeklyWager >= MIN_WEEKLY_WAGER;
 
       const response: LookupResponse = {
         stake_id: stakeId,
         period_label: periodLabel,
         wagered_amount: weightedWager,
         lifetime_wagered: lifetimeWagered,
+        weekly_wager: Math.floor(weeklyWager),
         tickets_total: ticketsTotal,
         tickets_used: ticketsUsed,
         tickets_remaining: ticketsRemaining,
         wallet_balance: walletBalance,
         spin_balances: spinBalances,
         pending_withdrawals: pendingWithdrawals,
-        can_daily_bonus: bonusStatus.canUse,
+        can_daily_bonus: bonusStatus.canUse && bonusWagerMet,
         next_bonus_at: bonusStatus.nextBonusAt?.toISOString(),
+        bonus_wager_met: bonusWagerMet,
       };
 
       return res.json(response);
@@ -866,6 +1007,61 @@ export async function registerRoutes(
         return res.status(503).json({ message: "Google Sheet data unavailable. Please check sheet configuration." } as ErrorResponse);
       }
       return res.status(500).json({ message: errMsg } as ErrorResponse);
+    }
+  });
+
+  // Get user's referral stats
+  app.get("/api/referrals", async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId;
+      if (!userId) {
+        return res.status(401).json({ message: "Please log in to view referrals." });
+      }
+      
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(401).json({ message: "User not found." });
+      }
+      
+      // Get referrals where this user is the referrer
+      const myReferrals = await db.select({
+        id: referrals.id,
+        referredUserId: referrals.referredUserId,
+        status: referrals.status,
+        bonusAwarded: referrals.bonusAwarded,
+        createdAt: referrals.createdAt,
+        qualifiedAt: referrals.qualifiedAt,
+      }).from(referrals).where(eq(referrals.referrerUserId, userId));
+      
+      // Get referred user usernames (masked)
+      const referralDetails = await Promise.all(myReferrals.map(async (ref) => {
+        const [referredUser] = await db.select({ username: users.username }).from(users).where(eq(users.id, ref.referredUserId));
+        return {
+          id: ref.id,
+          username: referredUser?.username ? maskUsername(referredUser.username) : "Unknown",
+          status: ref.status,
+          bonusAwarded: ref.bonusAwarded,
+          createdAt: ref.createdAt,
+          qualifiedAt: ref.qualifiedAt,
+        };
+      }));
+      
+      // Calculate totals
+      const totalReferrals = myReferrals.length;
+      const qualifiedReferrals = myReferrals.filter(r => r.status === "qualified").length;
+      const totalBonusEarned = myReferrals.reduce((sum, r) => sum + (r.bonusAwarded || 0), 0);
+      
+      return res.json({
+        referralCode: user.referralCode,
+        totalReferrals,
+        qualifiedReferrals,
+        pendingReferrals: totalReferrals - qualifiedReferrals,
+        totalBonusEarned,
+        referrals: referralDetails,
+      });
+    } catch (err) {
+      console.error("Referral stats error:", err);
+      return res.status(500).json({ message: "Failed to fetch referral stats." });
     }
   });
 
@@ -1048,13 +1244,19 @@ export async function registerRoutes(
         return res.status(403).json({ message: "Account suspended. Contact support." } as ErrorResponse);
       }
 
+      // Minimum weekly wager requirement for daily bonus
+      const MIN_WEEKLY_WAGER = 1000;
+      
       // Check for database override first (for manually added users)
       const override = await getWagerOverride(stakeId);
       let wageredAmount = 0;
+      let weeklyWager = 0;
       
       if (override && (override.lifetimeWagered !== null || override.yearToDateWagered !== null)) {
         // Use override values (for testing/manual users)
         wageredAmount = override.yearToDateWagered ?? override.lifetimeWagered ?? 0;
+        // For overrides, assume they meet weekly requirement (admin-added users)
+        weeklyWager = MIN_WEEKLY_WAGER;
       } else {
         // Fall back to Google Sheets data
         const wagerRow = await getWagerRow(stakeId);
@@ -1062,6 +1264,16 @@ export async function registerRoutes(
           return res.status(404).json({ message: "Stake ID not found in wagering data" } as ErrorResponse);
         }
         wageredAmount = wagerRow.wageredAmount;
+        weeklyWager = wagerRow.wageredWeekly || 0;
+      }
+      
+      // Check weekly wager requirement
+      if (weeklyWager < MIN_WEEKLY_WAGER) {
+        return res.status(403).json({ 
+          message: `Daily bonus requires $${MIN_WEEKLY_WAGER.toLocaleString()}+ wagered this week. You have $${Math.floor(weeklyWager).toLocaleString()} wagered.`,
+          weekly_wager: weeklyWager,
+          required_wager: MIN_WEEKLY_WAGER,
+        } as ErrorResponse);
       }
 
       // Get or create user state
@@ -1233,23 +1445,46 @@ export async function registerRoutes(
         return res.status(400).json({ message: "No Stake username linked to your account." } as ErrorResponse);
       }
 
+      // Check weekly wager requirement
+      const MIN_WEEKLY_WAGER = 1000;
+      let weeklyWager = 0;
+      let meetsWagerRequirement = false;
+      
+      const override = await getWagerOverride(stakeId);
+      if (override && (override.lifetimeWagered !== null || override.yearToDateWagered !== null)) {
+        // Admin-added users automatically meet requirement
+        weeklyWager = MIN_WEEKLY_WAGER;
+        meetsWagerRequirement = true;
+      } else {
+        const wagerRow = await getWagerRow(stakeId);
+        weeklyWager = wagerRow?.wageredWeekly || 0;
+        meetsWagerRequirement = weeklyWager >= MIN_WEEKLY_WAGER;
+      }
+
       const [state] = await db.select().from(userState).where(eq(userState.stakeId, stakeId));
       
       const cooldownMs = 24 * 60 * 60 * 1000;
       const now = new Date();
       
-      if (!state || !state.lastBonusSpinAt) {
-        return res.json({ available: true, remaining_ms: 0 });
+      // Check cooldown
+      let cooldownAvailable = true;
+      let remainingMs = 0;
+      let nextBonusAt: string | null = null;
+      
+      if (state?.lastBonusSpinAt) {
+        const timeSince = now.getTime() - state.lastBonusSpinAt.getTime();
+        cooldownAvailable = timeSince >= cooldownMs;
+        remainingMs = cooldownAvailable ? 0 : cooldownMs - timeSince;
+        nextBonusAt = cooldownAvailable ? null : new Date(state.lastBonusSpinAt.getTime() + cooldownMs).toISOString();
       }
 
-      const timeSince = now.getTime() - state.lastBonusSpinAt.getTime();
-      const available = timeSince >= cooldownMs;
-      const remainingMs = available ? 0 : cooldownMs - timeSince;
-
       return res.json({
-        available,
+        available: cooldownAvailable && meetsWagerRequirement,
         remaining_ms: remainingMs,
-        next_bonus_at: available ? null : new Date(state.lastBonusSpinAt.getTime() + cooldownMs).toISOString(),
+        next_bonus_at: nextBonusAt,
+        weekly_wager: Math.floor(weeklyWager),
+        required_wager: MIN_WEEKLY_WAGER,
+        meets_wager_requirement: meetsWagerRequirement,
       });
     } catch (err) {
       console.error("Bonus check error:", err);

@@ -167,6 +167,19 @@ Navigate to `/admin` and enter admin credentials (username: "Lukerewards", passw
 - Free spin available once every 24 hours for registered users
 - 1 in 500 chance (0.2%) to win $5
 - Tracked via user_state table (lastBonusSpinAt field)
+- **Requirement**: Users must have $1,000+ wagered in current week (from NGR sheet's Wagered_Weekly column) to claim bonus
+
+### Referral System
+- **Referral Codes**: Each user gets a unique 8-character alphanumeric code on registration
+- **Sharing**: Users can share their referral link (e.g., `/register?ref=ABC12345`)
+- **Tracking**: When a referred user registers with a code, a referral record is created with "pending" status
+- **Qualification**: When the referred user hits $1,000 weekly wager, the referrer earns $2 bonus
+- **Bonus**: $2 (200 cents) credited to referrer's wallet as a wallet transaction
+- **Tables**: 
+  - `users.referral_code` - Unique code for each user
+  - `users.referred_by` - User ID of referrer
+  - `referrals` - Tracks referrer/referred relationships and bonus status
+- **Endpoint**: GET `/api/referrals` - Returns user's referral stats
 
 ### Demo Spin (No Login Required)
 - Available to visitors without creating an account

@@ -17,18 +17,29 @@ function getAuthHeaders(): HeadersInit {
   };
 }
 import { useLocation } from "wouter";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogIn, ShieldCheck } from "lucide-react";
+import { Loader2, LogIn, ShieldCheck, Gift, Copy, Check } from "lucide-react";
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
+  const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
   const [, navigate] = useLocation();
+  
+  const copyReferralLink = () => {
+    const referralCode = user?.referralCode;
+    if (!referralCode) return;
+    const referralLink = `${window.location.origin}/register?ref=${referralCode}`;
+    navigator.clipboard.writeText(referralLink);
+    setCopied(true);
+    toast({ title: "Copied!", description: "Referral link copied to clipboard" });
+    setTimeout(() => setCopied(false), 2000);
+  };
 
   const updateBonusStatusFromTicketData = (data: { can_daily_bonus: boolean; next_bonus_at?: string }) => {
     const nextBonusAt = data.next_bonus_at ? new Date(data.next_bonus_at) : null;
@@ -385,6 +396,35 @@ export default function Home() {
                 bonusStatus={bonusStatus || undefined}
                 onBonusUsed={handleBonusUsed}
               />
+              
+              {user?.referralCode && (
+                <Card className="max-w-md mx-auto">
+                  <CardHeader className="pb-3">
+                    <CardTitle className="flex items-center gap-2 text-base">
+                      <Gift className="w-4 h-4 text-primary" />
+                      Refer Friends & Earn
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3">
+                    <p className="text-sm text-muted-foreground">
+                      Share your referral code with friends. When they hit $1,000 weekly wager, you'll earn $2!
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex-1 bg-muted p-2 rounded-md font-mono text-center text-sm">
+                        {user.referralCode}
+                      </div>
+                      <Button 
+                        size="icon" 
+                        variant="outline" 
+                        onClick={copyReferralLink}
+                        data-testid="button-copy-referral"
+                      >
+                        {copied ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                      </Button>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           ) : null}
         </div>

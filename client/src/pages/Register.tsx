@@ -1,17 +1,18 @@
-import { useState } from "react";
-import { useLocation } from "wouter";
+import { useState, useEffect } from "react";
+import { useLocation, useSearch } from "wouter";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/use-auth";
-import { Loader2, UserPlus } from "lucide-react";
+import { Loader2, UserPlus, Gift } from "lucide-react";
 import { Link } from "wouter";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export default function Register() {
   const [, setLocation] = useLocation();
+  const searchString = useSearch();
   const { toast } = useToast();
   const { registerAsync, isRegistering, isAuthenticated } = useAuth();
   
@@ -20,6 +21,16 @@ export default function Register() {
   const [confirmPassword, setConfirmPassword] = useState("");
   const [email, setEmail] = useState("");
   const [stakePlatform, setStakePlatform] = useState<"us" | "com" | "">("");
+  const [referralCode, setReferralCode] = useState("");
+  
+  // Read referral code from URL params on mount
+  useEffect(() => {
+    const params = new URLSearchParams(searchString);
+    const refCode = params.get("ref") || params.get("referral");
+    if (refCode) {
+      setReferralCode(refCode.toUpperCase());
+    }
+  }, [searchString]);
 
   // Redirect if already logged in
   if (isAuthenticated) {
@@ -67,7 +78,7 @@ export default function Register() {
     }
 
     try {
-      await registerAsync({ username, password, email, stakePlatform });
+      await registerAsync({ username, password, email, stakePlatform, referralCode: referralCode || undefined });
       toast({
         title: "Account Created!",
         description: "Welcome! Please complete verification to start spinning.",
@@ -161,6 +172,25 @@ export default function Register() {
                 disabled={isRegistering}
                 data-testid="input-confirm-password"
               />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="referralCode" className="flex items-center gap-1">
+                <Gift className="w-3 h-3" />
+                Referral Code (optional)
+              </Label>
+              <Input
+                id="referralCode"
+                type="text"
+                placeholder="Enter referral code"
+                value={referralCode}
+                onChange={(e) => setReferralCode(e.target.value.toUpperCase())}
+                disabled={isRegistering}
+                data-testid="input-referral-code"
+                className="uppercase"
+              />
+              <p className="text-xs text-muted-foreground">
+                Have a friend's referral code? Enter it here for bonus rewards
+              </p>
             </div>
             <Button
               type="submit"

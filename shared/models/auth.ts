@@ -30,6 +30,9 @@ export const users = pgTable("users", {
   securityDisclaimerAccepted: boolean("security_disclaimer_accepted").default(false),
   // Soft delete field - when set, user is considered deleted
   deletedAt: timestamp("deleted_at"),
+  // Referral system fields
+  referralCode: varchar("referral_code").unique(), // Unique code for sharing
+  referredBy: varchar("referred_by"), // User ID of referrer
 });
 
 export type UpsertUser = typeof users.$inferInsert;
@@ -66,6 +69,7 @@ export const registerSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
   email: z.string().email("Please enter a valid email address"),
   stakePlatform: z.enum(["us", "com"], { required_error: "Please select your Stake platform" }),
+  referralCode: z.string().optional(), // Optional referral code from another user
 });
 
 // Login schema

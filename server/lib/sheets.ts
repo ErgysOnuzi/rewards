@@ -334,14 +334,21 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
     // For duplicates, sum the wagered amounts instead of skipping
     const existing = cache.get(normalizedId);
     
-    // Parse wagered amount - prefer monthly, fall back to weekly, then overall
-    let wageredAmount = 0;
+    // Parse wagered amounts
     const parseWager = (val: any): number => {
       if (!val) return 0;
       // Remove $ signs, commas and parse
       return parseFloat(String(val).replace(/[$,]/g, "")) || 0;
     };
     
+    // Parse weekly wager separately (for bonus eligibility check)
+    let wageredWeekly = 0;
+    if (wageredWeeklyIdx >= 0 && row[wageredWeeklyIdx]) {
+      wageredWeekly = Math.max(0, parseWager(row[wageredWeeklyIdx]));
+    }
+    
+    // Parse wagered amount - prefer monthly, fall back to weekly, then overall
+    let wageredAmount = 0;
     if (wageredMonthlyIdx >= 0 && row[wageredMonthlyIdx]) {
       wageredAmount = parseWager(row[wageredMonthlyIdx]);
     } else if (wageredWeeklyIdx >= 0 && row[wageredWeeklyIdx]) {
@@ -356,10 +363,12 @@ async function loadWagerDataCache(): Promise<Map<string, WagerRow>> {
     if (existing) {
       // Sum wagered amounts for duplicate users
       existing.wageredAmount += wageredAmount;
+      existing.wageredWeekly = (existing.wageredWeekly || 0) + wageredWeekly;
     } else {
       cache.set(normalizedId, {
         stakeId: stakeId,
         wageredAmount: wageredAmount,
+        wageredWeekly: wageredWeekly,
         periodLabel: "Monthly",
       });
     }
