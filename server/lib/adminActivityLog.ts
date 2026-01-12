@@ -21,9 +21,10 @@ export type AdminAction =
   | "view_user"
   | "manual_backup"
   | "download_backup"
-  | "update_user_profile";
+  | "update_user_profile"
+  | "setup_referrals";
 
-export type TargetType = "user" | "withdrawal" | "toggle" | "export" | "cache" | "backup" | "session";
+export type TargetType = "user" | "withdrawal" | "toggle" | "export" | "cache" | "backup" | "session" | "referral";
 
 export interface AdminActivityLogEntry {
   action: AdminAction;

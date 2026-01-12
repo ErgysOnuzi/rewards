@@ -3464,5 +3464,86 @@ export async function registerRoutes(
     }
   });
 
+  // =================== SETUP DEFAULT REFERRALS ===================
+  app.post("/api/admin/setup-referrals", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const DEFAULT_REFERRER = "ergysonuzi";
+    
+    try {
+      // Check if default referrer exists
+      const [defaultReferrer] = await db.select()
+        .from(users)
+        .where(sql`LOWER(${users.username}) = ${DEFAULT_REFERRER.toLowerCase()}`);
+      
+      if (!defaultReferrer) {
+        return res.status(400).json({ 
+          success: false,
+          message: `Default referrer "${DEFAULT_REFERRER}" does not exist. Please create this account first.`,
+          created: 0
+        });
+      }
+      
+      // Find users without referrals (excluding the default referrer themselves)
+      const usersWithoutReferrals = await db.select({ id: users.id, username: users.username })
+        .from(users)
+        .leftJoin(referrals, eq(users.id, referrals.referredUserId))
+        .where(and(
+          isNull(referrals.id),
+          sql`LOWER(${users.username}) != ${DEFAULT_REFERRER.toLowerCase()}`
+        ));
+      
+      if (usersWithoutReferrals.length === 0) {
+        return res.json({ 
+          success: true,
+          message: "All users already have referrers assigned.",
+          created: 0
+        });
+      }
+      
+      // Create referral records for users without referrers
+      let created = 0;
+      for (const user of usersWithoutReferrals) {
+        try {
+          await db.insert(referrals).values({
+            referrerUserId: defaultReferrer.id,
+            referredUserId: user.id,
+            referralCode: DEFAULT_REFERRER.toLowerCase(),
+            status: "pending",
+            createdAt: new Date(),
+          });
+          created++;
+        } catch (err) {
+          // Skip duplicates
+          console.log(`Skipping duplicate referral for user ${user.username}`);
+        }
+      }
+      
+      await logAdminActivity({
+        action: "setup_referrals",
+        targetType: "referral",
+        details: { 
+          defaultReferrer: DEFAULT_REFERRER,
+          usersAssigned: created,
+          totalWithoutReferrals: usersWithoutReferrals.length
+        },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
+      return res.json({ 
+        success: true,
+        message: `Successfully assigned ${created} users to ${DEFAULT_REFERRER}.`,
+        created
+      });
+    } catch (err) {
+      console.error("Setup referrals error:", err);
+      return res.status(500).json({ 
+        success: false,
+        message: "Failed to setup referrals",
+        created: 0
+      });
+    }
+  });
+
   return httpServer;
 }

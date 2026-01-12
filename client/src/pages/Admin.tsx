@@ -421,6 +421,23 @@ export default function Admin() {
     },
   });
 
+  const setupReferrals = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/admin/setup-referrals", { method: "POST", credentials: "include" });
+      if (!res.ok) {
+        const data = await res.json();
+        throw new Error(data.message || "Failed to setup referrals");
+      }
+      return res.json();
+    },
+    onSuccess: (data) => {
+      toast({ title: "Referrals Setup", description: data.message });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to setup referrals", description: err.message, variant: "destructive" });
+    },
+  });
+
   const processVerification = useMutation({
     mutationFn: async ({ id, status, admin_notes }: { id: number; status: "approved" | "rejected"; admin_notes?: string }) => {
       return apiRequest("POST", "/api/admin/verifications/process", { id, status, admin_notes });
@@ -2240,6 +2257,30 @@ export default function Admin() {
 
           {/* Backups Tab */}
           <TabsContent value="backups" className="space-y-4">
+            {/* Setup Referrals Card */}
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Users className="w-5 h-5" />
+                    Setup Default Referrals
+                  </CardTitle>
+                  <CardDescription>
+                    Assigns users without referrers to the default referrer (ergysonuzi). Run this after publishing to set up production.
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => setupReferrals.mutate()} 
+                  disabled={setupReferrals.isPending}
+                  size="sm"
+                  data-testid="button-setup-referrals"
+                >
+                  <Users className={`w-4 h-4 mr-2 ${setupReferrals.isPending ? "animate-spin" : ""}`} />
+                  {setupReferrals.isPending ? "Setting up..." : "Setup Referrals"}
+                </Button>
+              </CardHeader>
+            </Card>
+
             <Card>
               <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
                 <div>
