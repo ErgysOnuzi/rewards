@@ -289,18 +289,20 @@ export async function registerRoutes(
       };
       const newReferralCode = generateReferralCode();
       
-      // Look up referrer if referral code was provided
+      // Look up referrer if referral code was provided, otherwise use default referrer (ergysonuzi)
       let referrerId: string | null = null;
-      if (inputReferrer) {
-        // Look up referrer by username (case-insensitive)
-        const [referrer] = await db.select().from(users)
-          .where(sql`LOWER(${users.username}) = LOWER(${inputReferrer})`);
-        if (referrer && !referrer.deletedAt) {
-          referrerId = referrer.id;
-          console.log(`[Register] User referred by: ${referrer.username}`);
-        } else {
-          console.log(`[Register] Invalid referrer username provided: ${inputReferrer}`);
-        }
+      let actualReferrerUsername: string | null = null;
+      const referrerToLookup = inputReferrer || "ergysonuzi"; // Default to ergysonuzi if no referral provided
+      
+      // Look up referrer by username (case-insensitive)
+      const [referrer] = await db.select().from(users)
+        .where(sql`LOWER(${users.username}) = LOWER(${referrerToLookup})`);
+      if (referrer && !referrer.deletedAt) {
+        referrerId = referrer.id;
+        actualReferrerUsername = referrer.username;
+        console.log(`[Register] User referred by: ${referrer.username}${!inputReferrer ? " (default referrer)" : ""}`);
+      } else if (inputReferrer) {
+        console.log(`[Register] Invalid referrer username provided: ${inputReferrer}`);
       }
       
       // Create user with stake info pre-filled (still needs verification)
@@ -316,11 +318,11 @@ export async function registerRoutes(
       }).returning();
       
       // Create referral record if user was referred
-      if (referrerId) {
+      if (referrerId && actualReferrerUsername) {
         await db.insert(referrals).values({
           referrerUserId: referrerId,
           referredUserId: newUser.id,
-          referralCode: inputReferrer!, // Store the referrer username
+          referralCode: actualReferrerUsername, // Store the referrer username
           status: "pending",
         });
         console.log(`[Register] Referral record created for user ${newUser.username}`);
