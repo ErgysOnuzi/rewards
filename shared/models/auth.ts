@@ -30,9 +30,6 @@ export const users = pgTable("users", {
   securityDisclaimerAccepted: boolean("security_disclaimer_accepted").default(false),
   // Soft delete field - when set, user is considered deleted
   deletedAt: timestamp("deleted_at"),
-  // Referral system fields
-  referralCode: varchar("referral_code").unique(), // Unique code for sharing
-  referredBy: varchar("referred_by"), // User ID of referrer
 });
 
 export type UpsertUser = typeof users.$inferInsert;

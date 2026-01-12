@@ -283,28 +283,6 @@ export async function registerRoutes(
       // Encrypt sensitive data before storage
       const encryptedEmail = encrypt(email);
       
-      // Generate unique referral code for new user (8 chars alphanumeric)
-      const generateReferralCode = (): string => {
-        return crypto.randomBytes(4).toString("hex").toUpperCase();
-      };
-      const newReferralCode = generateReferralCode();
-      
-      // Look up referrer if referral code was provided, otherwise use default referrer (ergysonuzi)
-      let referrerId: string | null = null;
-      let actualReferrerUsername: string | null = null;
-      const referrerToLookup = inputReferrer || "ergysonuzi"; // Default to ergysonuzi if no referral provided
-      
-      // Look up referrer by username (case-insensitive)
-      const [referrer] = await db.select().from(users)
-        .where(sql`LOWER(${users.username}) = LOWER(${referrerToLookup})`);
-      if (referrer && !referrer.deletedAt) {
-        referrerId = referrer.id;
-        actualReferrerUsername = referrer.username;
-        console.log(`[Register] User referred by: ${referrer.username}${!inputReferrer ? " (default referrer)" : ""}`);
-      } else if (inputReferrer) {
-        console.log(`[Register] Invalid referrer username provided: ${inputReferrer}`);
-      }
-      
       // Create user with stake info pre-filled (still needs verification)
       const [newUser] = await db.insert(users).values({
         username: username.toLowerCase(),
@@ -313,19 +291,20 @@ export async function registerRoutes(
         stakeUsername: username.toLowerCase(),
         stakePlatform,
         verificationStatus: "unverified",
-        referralCode: newReferralCode,
-        referredBy: referrerId,
       }).returning();
       
-      // Create referral record if user was referred
-      if (referrerId && actualReferrerUsername) {
+      // Create referral record - use default referrer (ergysonuzi) if no referral provided
+      const referrerToLookup = inputReferrer || "ergysonuzi";
+      const [referrer] = await db.select().from(users)
+        .where(sql`LOWER(${users.username}) = LOWER(${referrerToLookup})`);
+      if (referrer && !referrer.deletedAt) {
         await db.insert(referrals).values({
-          referrerUserId: referrerId,
+          referrerUserId: referrer.id,
           referredUserId: newUser.id,
-          referralCode: actualReferrerUsername, // Store the referrer username
+          referralCode: referrer.username,
           status: "pending",
         });
-        console.log(`[Register] Referral record created for user ${newUser.username}`);
+        console.log(`[Register] Referral record created for user ${newUser.username}, referred by ${referrer.username}`);
       }
       
       // Set session (best effort - may fail in iframe contexts)
@@ -368,7 +347,6 @@ export async function registerRoutes(
           username: newUser.username,
           verificationStatus: newUser.verificationStatus,
           stakePlatform: newUser.stakePlatform,
-          referralCode: newUser.referralCode,
         },
       });
     } catch (err) {
@@ -508,7 +486,6 @@ export async function registerRoutes(
           stakePlatform: user.stakePlatform,
           verificationStatus: user.verificationStatus,
           securityDisclaimerAccepted: user.securityDisclaimerAccepted,
-          referralCode: user.referralCode,
         },
       });
     } catch (err) {
@@ -588,7 +565,6 @@ export async function registerRoutes(
           stakePlatform: user.stakePlatform,
           verificationStatus: user.verificationStatus,
           securityDisclaimerAccepted: user.securityDisclaimerAccepted,
-          referralCode: user.referralCode,
         },
         ...(newToken && { token: newToken }),
       });
@@ -1083,7 +1059,7 @@ export async function registerRoutes(
       const totalBonusEarned = myReferrals.reduce((sum, r) => sum + (r.bonusAwarded || 0), 0);
       
       return res.json({
-        referralCode: user.referralCode,
+        referralCode: user.username, // Use username as referral code
         totalReferrals,
         qualifiedReferrals,
         pendingReferrals: totalReferrals - qualifiedReferrals,
