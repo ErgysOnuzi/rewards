@@ -22,9 +22,6 @@ export const users = pgTable("users", {
   email: varchar("email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  // Legacy profile fields (kept for backwards compatibility)
-  firstName: text("first_name"),
-  lastName: text("last_name"),
   profileImageUrl: text("profile_image_url"),
   // Stake verification fields
   stakeUsername: varchar("stake_username"),
