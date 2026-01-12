@@ -9,12 +9,23 @@ import { User, Shield, Clock, CheckCircle, XCircle, AlertCircle, LogOut, Home, C
 import { useToast } from "@/hooks/use-toast";
 import { useQuery } from "@tanstack/react-query";
 
+interface ReferralDetail {
+  id: number;
+  username: string;
+  status: string;
+  bonusAwarded: number;
+  createdAt: string | null;
+  qualifiedAt: string | null;
+}
+
 interface ReferralStats {
   referralCode: string;
-  totalReferred: number;
-  qualifiedReferred: number;
-  pendingReferred: number;
+  referredBy: { username: string; joinedAt: string | null } | null;
+  totalReferrals: number;
+  qualifiedReferrals: number;
+  pendingReferrals: number;
   totalBonusEarned: number;
+  referrals: ReferralDetail[];
 }
 
 export default function Profile() {
@@ -201,6 +212,29 @@ export default function Profile() {
             </CardContent>
           </Card>
 
+          {/* Referred By Card */}
+          {referralStats?.referredBy && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="w-5 h-5" />
+                  Referred By
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-primary/20 flex items-center justify-center">
+                    <User className="w-5 h-5 text-primary" />
+                  </div>
+                  <div>
+                    <p className="font-medium" data-testid="text-referrer-username">@{referralStats.referredBy.username}</p>
+                    <p className="text-sm text-muted-foreground">Your referrer</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Referral Card */}
           <Card>
             <CardHeader>
@@ -226,11 +260,11 @@ export default function Profile() {
               {referralStats && (
                 <div className="grid grid-cols-3 gap-4 text-center">
                   <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-2xl font-bold" data-testid="text-total-referred">{referralStats.totalReferred}</p>
+                    <p className="text-2xl font-bold" data-testid="text-total-referred">{referralStats.totalReferrals}</p>
                     <p className="text-xs text-muted-foreground">Total Referred</p>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3">
-                    <p className="text-2xl font-bold text-green-500" data-testid="text-qualified-referred">{referralStats.qualifiedReferred}</p>
+                    <p className="text-2xl font-bold text-green-500" data-testid="text-qualified-referred">{referralStats.qualifiedReferrals}</p>
                     <p className="text-xs text-muted-foreground">Qualified</p>
                   </div>
                   <div className="bg-muted/30 rounded-lg p-3">
@@ -245,6 +279,56 @@ export default function Profile() {
               </p>
             </CardContent>
           </Card>
+
+          {/* Your Referrals List */}
+          {referralStats && referralStats.referrals.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <Share2 className="w-5 h-5" />
+                  Your Referrals ({referralStats.totalReferrals})
+                </CardTitle>
+                <CardDescription>Users who signed up with your referral link</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {referralStats.referrals.map((ref) => (
+                    <div 
+                      key={ref.id} 
+                      className="flex items-center justify-between p-3 bg-muted/30 rounded-lg"
+                      data-testid={`referral-item-${ref.id}`}
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                          <User className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <p className="font-medium">@{ref.username}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Joined {ref.createdAt ? new Date(ref.createdAt).toLocaleDateString() : "N/A"}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="text-right">
+                        {ref.status === "qualified" ? (
+                          <>
+                            <Badge className="bg-green-500/20 text-green-400 border-green-500/30">
+                              <CheckCircle className="w-3 h-3 mr-1" /> Qualified
+                            </Badge>
+                            <p className="text-sm text-green-500 mt-1">+${(ref.bonusAwarded / 100).toFixed(0)}</p>
+                          </>
+                        ) : (
+                          <Badge variant="secondary">
+                            <Clock className="w-3 h-3 mr-1" /> Pending
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
 
           {/* Actions Card */}
           <Card>

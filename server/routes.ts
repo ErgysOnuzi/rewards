@@ -1030,6 +1030,23 @@ export async function registerRoutes(
         return res.status(401).json({ message: "User not found." });
       }
       
+      // Get who referred this user
+      let referredBy: { username: string; joinedAt: string | null } | null = null;
+      const [myReferral] = await db.select({
+        referrerUserId: referrals.referrerUserId,
+        createdAt: referrals.createdAt,
+      }).from(referrals).where(eq(referrals.referredUserId, userId));
+      
+      if (myReferral) {
+        const [referrer] = await db.select({ username: users.username }).from(users).where(eq(users.id, myReferral.referrerUserId));
+        if (referrer) {
+          referredBy = {
+            username: referrer.username,
+            joinedAt: myReferral.createdAt?.toISOString() || null,
+          };
+        }
+      }
+      
       // Get referrals where this user is the referrer
       const myReferrals = await db.select({
         id: referrals.id,
@@ -1040,16 +1057,16 @@ export async function registerRoutes(
         qualifiedAt: referrals.qualifiedAt,
       }).from(referrals).where(eq(referrals.referrerUserId, userId));
       
-      // Get referred user usernames (masked)
+      // Get referred user usernames (NOT masked - user should see who they referred)
       const referralDetails = await Promise.all(myReferrals.map(async (ref) => {
         const [referredUser] = await db.select({ username: users.username }).from(users).where(eq(users.id, ref.referredUserId));
         return {
           id: ref.id,
-          username: referredUser?.username ? maskUsername(referredUser.username) : "Unknown",
+          username: referredUser?.username || "Unknown",
           status: ref.status,
-          bonusAwarded: ref.bonusAwarded,
-          createdAt: ref.createdAt,
-          qualifiedAt: ref.qualifiedAt,
+          bonusAwarded: ref.bonusAwarded || 0,
+          createdAt: ref.createdAt?.toISOString() || null,
+          qualifiedAt: ref.qualifiedAt?.toISOString() || null,
         };
       }));
       
@@ -1060,6 +1077,7 @@ export async function registerRoutes(
       
       return res.json({
         referralCode: user.username, // Use username as referral code
+        referredBy,
         totalReferrals,
         qualifiedReferrals,
         pendingReferrals: totalReferrals - qualifiedReferrals,
