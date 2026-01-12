@@ -184,7 +184,7 @@ Navigate to `/admin` and enter admin credentials (username: "Lukerewards", passw
 ### Demo Spin (No Login Required)
 - Available to visitors without creating an account
 - Shows the full spinning animation and experience
-- Same 0.2% win chance but prizes are marked as "[DEMO]"
+- Same 0.2% win chance as daily bonus
 - Encourages visitors to register for real prizes
 - Endpoint: POST `/api/spin/demo`
 

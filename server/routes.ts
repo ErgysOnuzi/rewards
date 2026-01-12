@@ -1464,8 +1464,8 @@ export async function registerRoutes(
       
       // Generate prize based on result
       const prize = isWin 
-        ? { label: "[DEMO] $5", value: 5, color: "green" as const }
-        : { label: "[DEMO] $0", value: 0, color: "grey" as const };
+        ? { label: "$5", value: 5, color: "green" as const }
+        : { label: "$0", value: 0, color: "grey" as const };
 
       console.log(`[Demo Spin] IP: ${ipHash.slice(0, 8)}... Spin #${newCount} Result: ${isWin ? "WIN" : "LOSE"}`);
 
