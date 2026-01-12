@@ -556,7 +556,8 @@ export default function Admin() {
 
   const resetPassword = useMutation({
     mutationFn: async ({ userId, newPassword }: { userId: string; newPassword: string }) => {
-      return apiRequest("POST", "/api/admin/reset-password", { userId, newPassword });
+      const res = await apiRequest("POST", "/api/admin/reset-password", { userId, newPassword });
+      return res.json();
     },
     onSuccess: (data: any) => {
       setPasswordResetUser(null);
@@ -570,7 +571,8 @@ export default function Admin() {
 
   const createUser = useMutation({
     mutationFn: async (userData: typeof manualUser) => {
-      return apiRequest("POST", "/api/admin/create-user", userData);
+      const res = await apiRequest("POST", "/api/admin/create-user", userData);
+      return res.json();
     },
     onSuccess: (data: any) => {
       setManualUser({
@@ -593,7 +595,8 @@ export default function Admin() {
 
   const updateVerification = useMutation({
     mutationFn: async ({ userId, status }: { userId: string; status: string }) => {
-      return apiRequest("POST", "/api/admin/update-verification", { userId, status });
+      const res = await apiRequest("POST", "/api/admin/update-verification", { userId, status });
+      return res.json();
     },
     onSuccess: (data: any) => {
       setVerifyUser(null);
@@ -609,7 +612,8 @@ export default function Admin() {
 
   const updateWager = useMutation({
     mutationFn: async ({ stakeUsername, lifetimeWagered, yearToDateWagered }: { stakeUsername: string; lifetimeWagered: string; yearToDateWagered: string }) => {
-      return apiRequest("POST", "/api/admin/update-wager", { stakeUsername, lifetimeWagered, yearToDateWagered });
+      const res = await apiRequest("POST", "/api/admin/update-wager", { stakeUsername, lifetimeWagered, yearToDateWagered });
+      return res.json();
     },
     onSuccess: (data: any) => {
       setWagerEditUser(null);
@@ -636,7 +640,8 @@ export default function Admin() {
 
   const deleteUser = useMutation({
     mutationFn: async (userId: string) => {
-      return apiRequest("DELETE", `/api/admin/users/${userId}`);
+      const res = await apiRequest("DELETE", `/api/admin/users/${userId}`);
+      return res.json();
     },
     onSuccess: (data: any) => {
       setLookupResult(null);
@@ -654,7 +659,8 @@ export default function Admin() {
 
   const updateUserProfile = useMutation({
     mutationFn: async ({ userId, stakePlatform, stakeUsername }: { userId: string; stakePlatform?: string; stakeUsername?: string }) => {
-      return apiRequest("PATCH", `/api/admin/users/${userId}`, { stakePlatform, stakeUsername });
+      const res = await apiRequest("PATCH", `/api/admin/users/${userId}`, { stakePlatform, stakeUsername });
+      return res.json();
     },
     onSuccess: () => {
       setEditProfileUser(null);
