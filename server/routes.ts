@@ -306,6 +306,9 @@ export async function registerRoutes(
       }
       
       // Create user with stake info pre-filled (still needs verification)
+      // Generate default avatar using UI Avatars service
+      const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=10b981&color=fff&size=128`;
+      
       const [newUser] = await db.insert(users).values({
         username: username.toLowerCase(),
         passwordHash,
@@ -315,6 +318,7 @@ export async function registerRoutes(
         verificationStatus: "unverified",
         referralCode: newReferralCode,
         referredBy: referrerId,
+        profileImageUrl: defaultAvatar,
       }).returning();
       
       // Create referral record if user was referred
@@ -3269,6 +3273,9 @@ export async function registerRoutes(
       // Encrypt email if provided
       const encryptedEmail = email ? encrypt(email) : null;
       
+      // Generate default avatar using UI Avatars service
+      const defaultAvatar = `https://ui-avatars.com/api/?name=${encodeURIComponent(username)}&background=10b981&color=fff&size=128`;
+      
       // Create the user
       const [newUser] = await db.insert(users).values({
         username: username.toLowerCase(),
@@ -3277,6 +3284,7 @@ export async function registerRoutes(
         stakeUsername: stakeUsername.toLowerCase(),
         stakePlatform,
         verificationStatus,
+        profileImageUrl: defaultAvatar,
         createdAt: new Date(),
         updatedAt: new Date(),
       }).returning();
