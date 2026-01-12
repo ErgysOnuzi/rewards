@@ -799,6 +799,33 @@ export async function registerRoutes(
     return { canUse: false, nextBonusAt: nextBonus };
   }
   
+  // Get bonus event status from feature toggles
+  async function getBonusEventStatus(): Promise<{ active: boolean; multiplier: number; name: string }> {
+    const toggles = await db.select().from(featureToggles)
+      .where(sql`${featureToggles.key} IN ('BONUS_EVENT_ACTIVE', 'BONUS_EVENT_MULTIPLIER', 'BONUS_EVENT_NAME')`);
+    
+    const activeToggle = toggles.find(t => t.key === "BONUS_EVENT_ACTIVE");
+    const multiplierToggle = toggles.find(t => t.key === "BONUS_EVENT_MULTIPLIER");
+    const nameToggle = toggles.find(t => t.key === "BONUS_EVENT_NAME");
+    
+    return {
+      active: activeToggle?.value === "true",
+      multiplier: parseFloat(multiplierToggle?.value || "1.5") || 1.5,
+      name: nameToggle?.value || "Bonus Event",
+    };
+  }
+  
+  // Public endpoint for bonus event status (no auth required)
+  app.get("/api/bonus-event", async (_req: Request, res: Response) => {
+    try {
+      const status = await getBonusEventStatus();
+      return res.json(status);
+    } catch (err) {
+      console.error("Bonus event status error:", err);
+      return res.json({ active: false, multiplier: 1, name: "" });
+    }
+  });
+  
   // Check and award referral bonus when referred user hits $1k weekly wager
   const REFERRAL_BONUS_AMOUNT = 200; // $2 in cents
   async function checkAndAwardReferralBonus(userId: string, weeklyWager: number): Promise<boolean> {
@@ -1147,8 +1174,39 @@ export async function registerRoutes(
         return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
       }
 
+      // Check for active bonus event
+      const bonusEvent = await getBonusEventStatus();
+      
+      // Apply bonus multiplier to win probabilities if event is active
+      let prizesToUse = CASE_PRIZES;
+      if (bonusEvent.active && bonusEvent.multiplier > 1) {
+        // Normalize win probabilities while respecting multiplier boost
+        // We increase the relative weight of winning prizes by the multiplier
+        // then renormalize everything to sum to 100%
+        const multiplier = Math.min(bonusEvent.multiplier, 5); // Cap at 5x for safety
+        
+        // Calculate current totals
+        const currentLossProb = CASE_PRIZES.filter(p => p.value === 0).reduce((sum, p) => sum + p.probability, 0);
+        const currentWinProb = 100 - currentLossProb;
+        
+        // Apply multiplier to win probability (capped so total win can't exceed 90%)
+        const boostedWinProb = Math.min(currentWinProb * multiplier, 90);
+        const newLossProb = 100 - boostedWinProb;
+        
+        // Scale each prize proportionally to maintain distribution
+        const winScaleFactor = boostedWinProb / currentWinProb;
+        const lossScaleFactor = newLossProb / currentLossProb;
+        
+        prizesToUse = CASE_PRIZES.map(prize => ({
+          ...prize,
+          probability: prize.value === 0 
+            ? prize.probability * lossScaleFactor 
+            : prize.probability * winScaleFactor
+        }));
+      }
+      
       // Use weighted random selection for case prize
-      const prize = selectCasePrize(CASE_PRIZES);
+      const prize = selectCasePrize(prizesToUse);
       const isWin = prize.value > 0;
       const spinNumber = ticketsUsedBefore + 1;
       const ticketsUsedAfter = spinNumber;
@@ -2412,6 +2470,9 @@ export async function registerRoutes(
       SPINS_ENABLED: { value: "true", description: "Enable/disable spins globally" },
       RAFFLE_EXPORT_ENABLED: { value: "true", description: "Enable/disable raffle export" },
       ALLOWLIST_MODE_ENABLED: { value: "false", description: "Only allowlisted users can spin" },
+      BONUS_EVENT_ACTIVE: { value: "false", description: "Bonus event is currently active" },
+      BONUS_EVENT_MULTIPLIER: { value: "1.5", description: "Win odds multiplier during bonus event" },
+      BONUS_EVENT_NAME: { value: "Bonus Event", description: "Name displayed for the bonus event" },
     };
     
     const result: Record<string, any> = {};

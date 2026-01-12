@@ -19,13 +19,21 @@ function getAuthHeaders(): HeadersInit {
 import { useLocation } from "wouter";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogIn, ShieldCheck, Gift, Copy, Check } from "lucide-react";
+import { Loader2, LogIn, ShieldCheck, Gift, Copy, Check, Sparkles } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+interface BonusEventStatus {
+  active: boolean;
+  multiplier: number;
+  name: string;
+}
 
 export default function Home() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [ticketData, setTicketData] = useState<TicketData | null>(null);
   const [bonusStatus, setBonusStatus] = useState<BonusStatus | null>(null);
+  const [bonusEvent, setBonusEvent] = useState<BonusEventStatus | null>(null);
   const [copied, setCopied] = useState(false);
   const { toast } = useToast();
   const { user, isAuthenticated, isLoading: authLoading } = useAuth();
@@ -120,6 +128,25 @@ export default function Home() {
       fetchTicketData(user.stakeUsername, user.stakePlatform || "com");
     }
   }, [authLoading, isAuthenticated, user?.verificationStatus, user?.stakeUsername, user?.stakePlatform]);
+
+  // Fetch bonus event status
+  useEffect(() => {
+    const fetchBonusEvent = async () => {
+      try {
+        const response = await fetch("/api/bonus-event");
+        if (response.ok) {
+          const data = await response.json();
+          setBonusEvent(data);
+        }
+      } catch (err) {
+        console.error("Failed to fetch bonus event:", err);
+      }
+    };
+    fetchBonusEvent();
+    // Refresh every 5 minutes
+    const interval = setInterval(fetchBonusEvent, 5 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const handleSpin = async (): Promise<CaseSpinResult> => {
     if (!ticketData) {
@@ -385,6 +412,23 @@ export default function Home() {
                 data={ticketData}
                 onWithdraw={handleWithdraw}
               />
+              
+              {bonusEvent?.active && (
+                <Card className="max-w-2xl mx-auto bg-gradient-to-r from-primary/20 via-primary/10 to-primary/20 border-primary/30">
+                  <CardContent className="py-4">
+                    <div className="flex items-center justify-center gap-3 text-center">
+                      <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+                      <div>
+                        <span className="font-bold text-lg">{bonusEvent.name}</span>
+                        <Badge variant="secondary" className="ml-2">
+                          {bonusEvent.multiplier}x Odds
+                        </Badge>
+                      </div>
+                      <Sparkles className="w-5 h-5 text-primary animate-pulse" />
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
               
               <CaseOpening
                 ticketsRemaining={ticketData.ticketsRemaining}
