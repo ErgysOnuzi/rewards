@@ -7,10 +7,32 @@ const DEFAULT_REFERRER = "ergysonuzi";
 export async function runStartupMaintenance(): Promise<void> {
   console.log("[Maintenance] Running startup maintenance...");
   
+  await ensureTablesExist();
   await fixSchemaColumns();
   await setupDefaultReferrals();
   
   console.log("[Maintenance] Startup maintenance completed");
+}
+
+async function ensureTablesExist(): Promise<void> {
+  try {
+    // Create referrals table if it doesn't exist
+    await db.execute(sql`
+      CREATE TABLE IF NOT EXISTS referrals (
+        id SERIAL PRIMARY KEY,
+        referrer_user_id INTEGER NOT NULL REFERENCES users(id),
+        referred_user_id INTEGER NOT NULL REFERENCES users(id) UNIQUE,
+        referral_code VARCHAR(50) NOT NULL,
+        status VARCHAR(20) DEFAULT 'pending',
+        bonus_amount INTEGER DEFAULT 0,
+        created_at TIMESTAMP DEFAULT NOW(),
+        qualified_at TIMESTAMP
+      )
+    `);
+    console.log("[Maintenance] Ensured referrals table exists");
+  } catch (err) {
+    console.error("[Maintenance] Error creating tables:", err);
+  }
 }
 
 async function fixSchemaColumns(): Promise<void> {
