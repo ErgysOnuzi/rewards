@@ -11,6 +11,7 @@ import { enforceSecurityRequirements } from "./lib/config";
 import { pool, bootstrapDatabase } from "./db";
 import { verifyToken } from "./lib/jwt";
 import { startBackupScheduler } from "./lib/backup";
+import { runStartupMaintenance } from "./lib/startupMaintenance";
 
 // Validate security requirements at startup - fail hard if missing
 enforceSecurityRequirements();
@@ -170,6 +171,7 @@ app.use((req, res, next) => {
   // This is critical for production deployments where tables may not exist
   try {
     await bootstrapDatabase();
+    await runStartupMaintenance();
   } catch (dbError) {
     console.error("[FATAL] Database bootstrap failed:", dbError);
     process.exit(1);
