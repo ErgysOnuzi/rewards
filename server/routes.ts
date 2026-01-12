@@ -3555,9 +3555,10 @@ export async function registerRoutes(
       });
     } catch (err) {
       console.error("Setup referrals error:", err);
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
       return res.status(500).json({ 
         success: false,
-        message: "Failed to setup referrals",
+        message: `Failed to setup referrals: ${errorMessage}`,
         created: 0
       });
     }
