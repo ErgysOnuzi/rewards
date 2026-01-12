@@ -2135,6 +2135,54 @@ export async function registerRoutes(
     return res.json({ users: filteredUsers, total: allUsers.length });
   });
 
+  // Update user profile (admin)
+  app.patch("/api/admin/users/:userId", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    const { userId } = req.params;
+    const updateSchema = z.object({
+      stakePlatform: z.enum(["us", "com"]).optional(),
+      stakeUsername: z.string().min(1).optional(),
+    });
+    
+    try {
+      const data = updateSchema.parse(req.body);
+      
+      if (Object.keys(data).length === 0) {
+        return res.status(400).json({ message: "No fields to update" });
+      }
+      
+      const [existingUser] = await db.select().from(users).where(eq(users.id, userId));
+      if (!existingUser || existingUser.deletedAt) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      const updateFields: Record<string, any> = { updatedAt: new Date() };
+      if (data.stakePlatform) updateFields.stakePlatform = data.stakePlatform;
+      if (data.stakeUsername) updateFields.stakeUsername = data.stakeUsername.toLowerCase();
+      
+      await db.update(users).set(updateFields).where(eq(users.id, userId));
+      
+      await logAdminActivity({
+        action: "update_user_profile",
+        targetType: "user",
+        targetId: userId,
+        details: { 
+          username: existingUser.username,
+          changes: data 
+        },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
+      return res.json({ success: true, message: "User updated successfully" });
+    } catch (err: any) {
+      if (err instanceof z.ZodError) {
+        return res.status(400).json({ message: "Invalid data", errors: err.errors });
+      }
+      return res.status(500).json({ message: err.message || "Failed to update user" });
+    }
+  });
+
   // =================== WEIGHTED SPREADSHEET DATA ===================
   app.get("/api/admin/spreadsheet/:domain", async (req: Request, res: Response) => {
     if (!await requireAdmin(req, res)) return;

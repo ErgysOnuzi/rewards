@@ -11,7 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { 
   Trophy, X, RotateCw, Users, ArrowUpFromLine, Check, Ban, 
   Search, Shield, AlertTriangle, Settings, Download, Database,
-  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key, UserPlus, Trash2
+  Eye, Lock, LogOut, RefreshCw, Copy, FileDown, Activity, UserCheck, Key, UserPlus, Trash2, Edit
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Link } from "wouter";
@@ -278,6 +278,8 @@ export default function Admin() {
   const [newVerificationStatus, setNewVerificationStatus] = useState<string>("");
   const [wagerEditUser, setWagerEditUser] = useState<{ id: string; username: string; stakeUsername: string } | null>(null);
   const [wagerEditData, setWagerEditData] = useState({ lifetimeWagered: "", yearToDateWagered: "" });
+  const [editProfileUser, setEditProfileUser] = useState<{ id: string; username: string; stakePlatform: string; stakeUsername: string } | null>(null);
+  const [editProfileData, setEditProfileData] = useState({ stakePlatform: "us" as "us" | "com", stakeUsername: "" });
   const [manualUser, setManualUser] = useState({
     username: "",
     password: "",
@@ -647,6 +649,21 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to delete user", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const updateUserProfile = useMutation({
+    mutationFn: async ({ userId, stakePlatform, stakeUsername }: { userId: string; stakePlatform?: string; stakeUsername?: string }) => {
+      return apiRequest("PATCH", `/api/admin/users/${userId}`, { stakePlatform, stakeUsername });
+    },
+    onSuccess: () => {
+      setEditProfileUser(null);
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/verification-status"] });
+      toast({ title: "Profile updated", description: "User profile has been updated successfully." });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to update profile", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1721,6 +1738,25 @@ export default function Admin() {
                               >
                                 <UserCheck className="w-3 h-3 mr-1" /> Verify
                               </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => {
+                                  setEditProfileUser({ 
+                                    id: u.id, 
+                                    username: u.username, 
+                                    stakePlatform: u.stakePlatform || "us",
+                                    stakeUsername: u.stakeUsername || ""
+                                  });
+                                  setEditProfileData({ 
+                                    stakePlatform: (u.stakePlatform || "us") as "us" | "com",
+                                    stakeUsername: u.stakeUsername || ""
+                                  });
+                                }}
+                                data-testid={`button-edit-profile-${u.id}`}
+                              >
+                                <Edit className="w-3 h-3 mr-1" /> Edit
+                              </Button>
                               {u.stakeUsername && (
                                 <Button
                                   size="sm"
@@ -1835,6 +1871,63 @@ export default function Admin() {
                             data-testid="button-confirm-verify"
                           >
                             {updateVerification.isPending ? "Updating..." : "Update Status"}
+                          </Button>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+                )}
+
+                {/* Edit Profile Dialog */}
+                {editProfileUser && (
+                  <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50" onClick={() => setEditProfileUser(null)}>
+                    <Card className="w-full max-w-md" onClick={(e) => e.stopPropagation()}>
+                      <CardHeader>
+                        <CardTitle>Edit User Profile</CardTitle>
+                        <CardDescription>
+                          Update profile for @{editProfileUser.username}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        <div className="space-y-2">
+                          <Label htmlFor="edit-stake-username">Stake Username</Label>
+                          <Input
+                            id="edit-stake-username"
+                            value={editProfileData.stakeUsername}
+                            onChange={(e) => setEditProfileData(d => ({ ...d, stakeUsername: e.target.value }))}
+                            placeholder="Enter Stake username"
+                            data-testid="input-edit-stake-username"
+                          />
+                        </div>
+                        <div className="space-y-2">
+                          <Label>Platform</Label>
+                          <Select
+                            value={editProfileData.stakePlatform}
+                            onValueChange={(v) => setEditProfileData(d => ({ ...d, stakePlatform: v as "us" | "com" }))}
+                          >
+                            <SelectTrigger data-testid="select-edit-platform">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="us">Stake.us (US)</SelectItem>
+                              <SelectItem value="com">Stake.com (COM)</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                        <div className="flex gap-2 justify-end">
+                          <Button variant="outline" onClick={() => setEditProfileUser(null)} data-testid="button-cancel-edit-profile">
+                            Cancel
+                          </Button>
+                          <Button
+                            onClick={() => updateUserProfile.mutate({ 
+                              userId: editProfileUser.id, 
+                              stakePlatform: editProfileData.stakePlatform,
+                              stakeUsername: editProfileData.stakeUsername || undefined
+                            })}
+                            disabled={updateUserProfile.isPending}
+                            data-testid="button-confirm-edit-profile"
+                          >
+                            {updateUserProfile.isPending ? "Saving..." : "Save Changes"}
                           </Button>
                         </div>
                       </CardContent>
