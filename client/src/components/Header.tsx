@@ -85,6 +85,12 @@ export default function Header({ walletBalance, ticketsRemaining, stakeId }: Hea
                 </div>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
+                  <Link href="/profile" className="cursor-pointer">
+                    <User className="w-4 h-4 mr-2" />
+                    My Profile
+                  </Link>
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
                   <Link href="/verify" className="cursor-pointer">
                     <Shield className="w-4 h-4 mr-2" />
                     Verify Account

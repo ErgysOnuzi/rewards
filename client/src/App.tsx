@@ -10,6 +10,7 @@ import Admin from "@/pages/Admin";
 import Verify from "@/pages/Verify";
 import Login from "@/pages/Login";
 import Register from "@/pages/Register";
+import Profile from "@/pages/Profile";
 
 // Initialize iframe auth listener on module load
 initIframeAuth();
@@ -21,6 +22,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/register" component={Register} />
       <Route path="/verify" component={Verify} />
+      <Route path="/profile" component={Profile} />
       <Route path="/admin" component={Admin} />
       <Route component={NotFound} />
     </Switch>
