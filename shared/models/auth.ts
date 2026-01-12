@@ -22,7 +22,6 @@ export const users = pgTable("users", {
   email: varchar("email"),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow(),
-  profileImageUrl: text("profile_image_url"),
   // Stake verification fields
   stakeUsername: varchar("stake_username"),
   stakePlatform: varchar("stake_platform"), // "us" or "com"
