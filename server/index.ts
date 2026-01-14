@@ -35,8 +35,8 @@ app.use(securityHeaders);
 app.use(cookieParser());
 
 // Session middleware for custom authentication
-// Sessions expire after 20 minutes of inactivity (rolling resets on each request)
-const SESSION_TIMEOUT = 20 * 60 * 1000; // 20 minutes in milliseconds
+// Sessions last 30 days, refreshed on each request (rolling)
+const SESSION_TIMEOUT = 30 * 24 * 60 * 60 * 1000; // 30 days in milliseconds
 const PgSession = connectPgSimple(session);
 
 // Determine if running in production/HTTPS context
