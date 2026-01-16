@@ -1684,6 +1684,22 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Get all wallet balances (winners)
+  app.get("/api/admin/wallets", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const wallets = await db.select().from(userWallets)
+        .where(sql`${userWallets.balance} > 0`)
+        .orderBy(desc(userWallets.balance))
+        .limit(200);
+      return res.json({ wallets });
+    } catch (err) {
+      console.error("Admin wallets error:", err);
+      return res.status(500).json({ message: "Failed to fetch wallets" });
+    }
+  });
+
   // Admin: Process withdrawal request
   app.post("/api/admin/withdrawals/process", async (req: Request, res: Response) => {
     if (!await requireAdmin(req, res)) return;

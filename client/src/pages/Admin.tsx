@@ -315,6 +315,11 @@ export default function Admin() {
     enabled: isAuthenticated === true,
   });
 
+  const { data: walletsData } = useQuery<{ wallets: { id: number; stakeId: string; balance: number }[] }>({
+    queryKey: ["/api/admin/wallets"],
+    enabled: isAuthenticated === true,
+  });
+
   const { data: dataStatus, refetch: refetchStatus } = useQuery<DataStatus>({
     queryKey: ["/api/admin/data-status"],
     enabled: isAuthenticated === true,
@@ -1392,6 +1397,45 @@ export default function Admin() {
                           ) : (
                             <Badge variant={w.status === "approved" ? "default" : "secondary"} className="text-xs">{w.status}</Badge>
                           )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+            
+            <Card data-testid="card-winners">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2" data-testid="title-winners">
+                  <Trophy className="w-5 h-5 text-yellow-500" />
+                  Winners (Wallet Balances)
+                </CardTitle>
+                <CardDescription data-testid="desc-winners">All users who have won money (even if they haven't requested a withdrawal yet)</CardDescription>
+              </CardHeader>
+              <CardContent>
+                {!walletsData?.wallets || walletsData.wallets.length === 0 ? (
+                  <p className="text-center text-muted-foreground py-8" data-testid="text-no-winners">No winners yet</p>
+                ) : (
+                  <div className="space-y-2">
+                    {walletsData.wallets.map((w) => (
+                      <div key={w.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4 p-3 rounded-md border bg-green-500/5 border-green-500/30" data-testid={`row-winner-${w.id}`}>
+                        <div className="min-w-0">
+                          <div className="font-medium text-sm break-all" data-testid={`text-stakeid-${w.id}`}>{w.stakeId}</div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <Badge variant="default" data-testid={`badge-balance-${w.id}`}>
+                            {formatAmount(w.balance)}
+                          </Badge>
+                          <Button 
+                            size="sm" 
+                            variant="outline"
+                            onClick={() => setLookupId(w.stakeId)}
+                            title="Copy to lookup"
+                            data-testid={`button-lookup-${w.id}`}
+                          >
+                            <Search className="w-4 h-4" />
+                          </Button>
                         </div>
                       </div>
                     ))}
