@@ -30,6 +30,26 @@ Instead of automatic bet ID lookup, users upload screenshots showing their Stake
 - Max file size: 10MB
 - Allowed types: JPEG, PNG, GIF, WebP
 
+### Password Reset
+- Users can reset their password via `/forgot-password` page
+- Requires username + email match to send reset link
+- Reset tokens expire in 1 hour (stored as SHA-256 hash in database)
+- Token-based reset via `/reset-password?token=...` page
+
+## Email Notifications
+
+### SMTP Configuration
+- **Provider**: PrivateEmail.com (mail.privateemail.com:587 with STARTTLS)
+- **Sender**: rewards@lukethedegen.com
+- **Library**: nodemailer
+
+### Email Types
+1. **Verification Approved**: Sent when admin approves user verification
+2. **Password Reset**: Contains secure one-time link (1 hour expiry)
+
+### Required Secret
+- `SMTP_PASSWORD` - Password for rewards@lukethedegen.com
+
 ## User Preferences
 
 Preferred communication style: Simple, everyday language.

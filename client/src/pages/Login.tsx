@@ -100,10 +100,20 @@ export default function Login() {
             </Button>
           </form>
           
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          <div className="mt-4 text-center">
+            <Link href="/forgot-password" data-testid="link-forgot-password">
+              <Button variant="ghost" size="sm" className="text-muted-foreground">
+                Forgot your password?
+              </Button>
+            </Link>
+          </div>
+          
+          <div className="mt-4 text-center text-sm text-muted-foreground">
             <span>Don't have an account? </span>
-            <Link href="/register" className="text-primary hover:underline" data-testid="link-register">
-              Create one
+            <Link href="/register" data-testid="link-register">
+              <Button variant="ghost" size="sm" className="p-0 h-auto">
+                Create one
+              </Button>
             </Link>
           </div>
         </CardContent>

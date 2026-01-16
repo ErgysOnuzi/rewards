@@ -38,6 +38,7 @@ import {
 } from "./lib/security";
 import { logAdminActivity, getAdminActivityLogs, getAdminActivityLogCount, type AdminAction, type TargetType } from "./lib/adminActivityLog";
 import { createBackup, getBackupStatus, listBackupFiles } from "./lib/backup";
+import { sendPasswordResetEmail, sendVerificationApprovedEmail } from "./lib/email";
 
 
 // Count regular spins for a user from database (excludes bonus spins)
@@ -519,6 +520,132 @@ export async function registerRoutes(
       res.clearCookie("connect.sid");
       return res.json({ success: true });
     });
+  });
+
+  // =================== FORGOT PASSWORD ===================
+  // User requests a password reset email
+  app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
+    try {
+      const { username, email } = req.body;
+      
+      if (!username || !email) {
+        return res.status(400).json({ message: "Username and email are required" });
+      }
+      
+      // Find user by username (case-insensitive)
+      const [user] = await db.select().from(users)
+        .where(sql`lower(${users.username}) = ${username.toLowerCase().trim()}`);
+      
+      if (!user) {
+        // Don't reveal whether user exists
+        return res.json({ success: true, message: "If an account with that username and email exists, a reset link has been sent." });
+      }
+      
+      // Check if email matches (decrypt stored email)
+      const storedEmail = user.email ? decrypt(user.email) : "";
+      if (storedEmail.toLowerCase() !== email.toLowerCase().trim()) {
+        // Don't reveal whether email matched
+        return res.json({ success: true, message: "If an account with that username and email exists, a reset link has been sent." });
+      }
+      
+      // Generate reset token
+      const resetToken = crypto.randomBytes(32).toString("hex");
+      const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+      const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour expiry
+      
+      // Delete any existing tokens for this user
+      await db.delete(passwordResetTokens).where(eq(passwordResetTokens.userId, user.id));
+      
+      // Store hashed token in database
+      await db.insert(passwordResetTokens).values({
+        userId: user.id,
+        tokenHash,
+        expiresAt,
+      });
+      
+      // Send reset email - construct full URL (require BASE_URL for security)
+      const baseUrl = process.env.BASE_URL;
+      if (!baseUrl) {
+        console.error("[Password Reset] BASE_URL environment variable not set");
+        return res.status(500).json({ message: "Server configuration error. Please contact support." });
+      }
+      const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
+      const emailResult = await sendPasswordResetEmail(storedEmail, user.username, resetLink);
+      if (!emailResult.success) {
+        console.error("[Password Reset] Failed to send email:", emailResult.error);
+        return res.status(500).json({ message: "Failed to send reset email. Please try again later." });
+      }
+      
+      console.log("[Password Reset] Reset email sent for user:", user.username);
+      
+      return res.json({ success: true, message: "If an account with that username and email exists, a reset link has been sent." });
+    } catch (err) {
+      console.error("Forgot password error:", err);
+      return res.status(500).json({ message: "An error occurred. Please try again later." });
+    }
+  });
+
+  // Reset password with token
+  app.post("/api/auth/reset-password", async (req: Request, res: Response) => {
+    try {
+      const { token, newPassword } = req.body;
+      
+      if (!token || !newPassword) {
+        return res.status(400).json({ message: "Token and new password are required" });
+      }
+      
+      if (newPassword.length < 8) {
+        return res.status(400).json({ message: "Password must be at least 8 characters" });
+      }
+      
+      // Hash the provided token to compare with stored hash
+      const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      
+      // Find valid token
+      const [resetRecord] = await db.select().from(passwordResetTokens)
+        .where(and(
+          eq(passwordResetTokens.tokenHash, tokenHash),
+          gte(passwordResetTokens.expiresAt, new Date())
+        ));
+      
+      if (!resetRecord) {
+        return res.status(400).json({ message: "Invalid or expired reset link" });
+      }
+      
+      // Find the user
+      const [user] = await db.select().from(users).where(eq(users.id, resetRecord.userId));
+      if (!user) {
+        return res.status(400).json({ message: "User not found" });
+      }
+      
+      // Hash new password
+      const SALT_ROUNDS = 12;
+      const passwordHash = await bcrypt.hash(newPassword, SALT_ROUNDS);
+      
+      // Update password
+      await db.update(users).set({
+        passwordHash,
+        updatedAt: new Date(),
+      }).where(eq(users.id, user.id));
+      
+      // Delete the used token
+      await db.delete(passwordResetTokens).where(eq(passwordResetTokens.id, resetRecord.id));
+      
+      // Log the reset
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: user.stakeUsername || user.username,
+        details: "Password reset completed successfully",
+      });
+      
+      console.log("[Password Reset] Password reset completed for user:", user.username);
+      
+      return res.json({ success: true, message: "Password has been reset successfully. You can now log in." });
+    } catch (err) {
+      console.error("Reset password error:", err);
+      return res.status(500).json({ message: "An error occurred. Please try again later." });
+    }
   });
   
   // Get current session - uses centralized auth middleware for both cookies and tokens
@@ -3080,6 +3207,22 @@ export async function registerRoutes(
         details: { stakeUsername: result.stakeUsername, admin_notes },
         ipHash: hashForLogging(getClientIpForSecurity(req)),
       });
+      
+      // Send verification email if approved
+      if (status === "approved") {
+        try {
+          const [user] = await db.select().from(users).where(eq(users.id, result.userId));
+          if (user && user.email) {
+            const decryptedEmail = decrypt(user.email);
+            if (decryptedEmail) {
+              const emailResult = await sendVerificationApprovedEmail(decryptedEmail, user.username);
+              console.log("[Verification] Email sent:", emailResult.success ? "success" : emailResult.error);
+            }
+          }
+        } catch (emailErr) {
+          console.error("[Verification] Failed to send verification email:", emailErr);
+        }
+      }
       
       return res.json({ success: true, id, status });
     } catch (err: any) {
