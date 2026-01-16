@@ -49,13 +49,16 @@ export default function Home() {
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const updateBonusStatusFromTicketData = (data: { can_daily_bonus: boolean; next_bonus_at?: string }) => {
+  const updateBonusStatusFromTicketData = (data: { can_daily_bonus: boolean; next_bonus_at?: string; bonus_wager_met?: boolean; weekly_wager?: number }) => {
     const nextBonusAt = data.next_bonus_at ? new Date(data.next_bonus_at) : null;
     const remainingMs = nextBonusAt ? Math.max(0, nextBonusAt.getTime() - Date.now()) : 0;
     setBonusStatus({
       available: data.can_daily_bonus,
       remainingMs,
       nextBonusAt: data.next_bonus_at ?? null,
+      meetsWagerRequirement: data.bonus_wager_met ?? true,
+      weeklyWager: data.weekly_wager ?? 0,
+      requiredWager: 1000,
     });
   };
   
@@ -73,6 +76,9 @@ export default function Home() {
         available: data.available,
         remainingMs: data.remaining_ms,
         nextBonusAt: data.next_bonus_at ?? null,
+        meetsWagerRequirement: data.meets_wager_requirement ?? true,
+        weeklyWager: data.weekly_wager ?? 0,
+        requiredWager: data.required_wager ?? 1000,
       });
     } catch (err) {
       console.error("Failed to check bonus status:", err);

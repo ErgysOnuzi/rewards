@@ -23,6 +23,9 @@ export interface BonusStatus {
   available: boolean;
   remainingMs: number;
   nextBonusAt: string | null;
+  meetsWagerRequirement?: boolean;
+  weeklyWager?: number;
+  requiredWager?: number;
 }
 
 interface CaseOpeningProps {
@@ -833,7 +836,13 @@ export default function CaseOpening({
                       ) : bonusStatus && (
                         <div className="flex items-center justify-center gap-2 text-sm text-muted-foreground">
                           <Clock className="w-4 h-4" />
-                          <span>Next bonus in {formatTimeRemaining(bonusStatus.remainingMs)}</span>
+                          {bonusStatus.meetsWagerRequirement === false ? (
+                            <span>Requires ${(bonusStatus.requiredWager || 1000).toLocaleString()}+ weekly wager (${(bonusStatus.weeklyWager || 0).toLocaleString()} wagered)</span>
+                          ) : bonusStatus.remainingMs > 0 ? (
+                            <span>Next bonus in {formatTimeRemaining(bonusStatus.remainingMs)}</span>
+                          ) : (
+                            <span>Bonus available!</span>
+                          )}
                         </div>
                       )}
                     </div>

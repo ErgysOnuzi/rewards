@@ -1153,11 +1153,17 @@ export async function registerRoutes(
       } else {
         // Fall back to Google Sheets data
         const wagerRow = await getWagerRow(stakeId);
-        if (!wagerRow) {
-          return res.status(404).json({ message: "Stake ID not found." } as ErrorResponse);
-        }
-        lifetimeWagered = wagerRow.wageredAmount;
         weightedWager = getWeightedWager(stakeId, domain);
+        
+        // User must exist in either NGR sheet OR weighted sheets
+        if (!wagerRow && weightedWager === 0) {
+          const existsInWeighted = usernameExistsInSpreadsheet(stakeId, domain);
+          if (!existsInWeighted) {
+            return res.status(404).json({ message: "Stake ID not found in our records." } as ErrorResponse);
+          }
+        }
+        
+        lifetimeWagered = wagerRow?.wageredAmount ?? 0;
       }
       
       // Calculate tickets from weighted wager
