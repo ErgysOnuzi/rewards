@@ -280,6 +280,7 @@ export default function Admin() {
   const [wagerEditData, setWagerEditData] = useState({ lifetimeWagered: "", yearToDateWagered: "" });
   const [editProfileUser, setEditProfileUser] = useState<{ id: string; username: string; stakePlatform: string; stakeUsername: string } | null>(null);
   const [editProfileData, setEditProfileData] = useState({ stakePlatform: "us" as "us" | "com", stakeUsername: "" });
+  const [grantSpinsData, setGrantSpinsData] = useState({ tier: "bronze" as "bronze" | "silver" | "gold", amount: "1" });
   const [manualUser, setManualUser] = useState({
     username: "",
     password: "",
@@ -687,6 +688,29 @@ export default function Admin() {
     },
     onError: (err: Error) => {
       toast({ title: "Failed to update profile", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const grantSpins = useMutation({
+    mutationFn: async ({ stakeUsername, tier, amount }: { stakeUsername: string; tier: string; amount: string }) => {
+      const res = await apiRequest("POST", "/api/admin/grant-spins", { stakeUsername, tier, amount });
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      setGrantSpinsData({ tier: "bronze", amount: "1" });
+      if (lookupResult) {
+        setLookupResult({
+          ...lookupResult,
+          localStats: {
+            ...lookupResult.localStats,
+            spinBalances: data.spinBalances,
+          },
+        });
+      }
+      toast({ title: "Spins granted", description: data.message });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to grant spins", description: err.message, variant: "destructive" });
     },
   });
 
@@ -1116,6 +1140,52 @@ export default function Admin() {
                             <div><span className="text-muted-foreground">Balance:</span> {formatAmount(lookupResult.localStats.walletBalance)}</div>
                           </div>
                         </div>
+                        
+                        <div className="mt-4 p-3 border rounded-md bg-muted/30">
+                          <h4 className="font-medium mb-3">Grant Free Spins</h4>
+                          <div className="flex flex-col sm:flex-row gap-2 items-end">
+                            <div className="space-y-1 flex-1">
+                              <Label className="text-xs">Tier</Label>
+                              <Select 
+                                value={grantSpinsData.tier} 
+                                onValueChange={(v) => setGrantSpinsData({ ...grantSpinsData, tier: v as "bronze" | "silver" | "gold" })}
+                              >
+                                <SelectTrigger data-testid="select-grant-tier">
+                                  <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="bronze">Bronze ($5)</SelectItem>
+                                  <SelectItem value="silver">Silver ($25)</SelectItem>
+                                  <SelectItem value="gold">Gold ($100)</SelectItem>
+                                </SelectContent>
+                              </Select>
+                            </div>
+                            <div className="space-y-1 w-24">
+                              <Label className="text-xs">Amount</Label>
+                              <Input 
+                                type="number" 
+                                min="1" 
+                                max="1000"
+                                value={grantSpinsData.amount}
+                                onChange={(e) => setGrantSpinsData({ ...grantSpinsData, amount: e.target.value })}
+                                data-testid="input-grant-amount"
+                              />
+                            </div>
+                            <Button 
+                              onClick={() => grantSpins.mutate({ 
+                                stakeUsername: lookupResult.stakeId, 
+                                tier: grantSpinsData.tier, 
+                                amount: grantSpinsData.amount 
+                              })}
+                              disabled={grantSpins.isPending || !grantSpinsData.amount}
+                              size="sm"
+                              data-testid="button-grant-spins"
+                            >
+                              {grantSpins.isPending ? "Granting..." : "Grant Spins"}
+                            </Button>
+                          </div>
+                        </div>
+
                         {lookupResult.flags && (
                           <div className="flex gap-2 flex-wrap">
                             {lookupResult.flags.isBlacklisted && <Badge variant="destructive">Blacklisted</Badge>}

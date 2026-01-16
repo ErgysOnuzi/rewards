@@ -3176,6 +3176,86 @@ export async function registerRoutes(
     }
   });
 
+  // Admin: Grant free spins to user
+  app.post("/api/admin/grant-spins", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { stakeUsername, tier, amount } = req.body;
+      
+      if (!stakeUsername || !tier || !amount) {
+        return res.status(400).json({ message: "stakeUsername, tier, and amount are required" });
+      }
+      
+      if (!["bronze", "silver", "gold"].includes(tier)) {
+        return res.status(400).json({ message: "Tier must be bronze, silver, or gold" });
+      }
+      
+      const spinAmount = parseInt(amount, 10);
+      if (isNaN(spinAmount) || spinAmount <= 0 || spinAmount > 1000) {
+        return res.status(400).json({ message: "Amount must be between 1 and 1000" });
+      }
+      
+      const stakeId = stakeUsername.toLowerCase();
+      
+      // Check if user exists in system
+      const [user] = await db.select().from(users).where(eq(users.stakeUsername, stakeId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found with that Stake username" });
+      }
+      
+      // Get current balance for this tier
+      const [existing] = await db.select().from(userSpinBalances)
+        .where(and(
+          eq(userSpinBalances.stakeId, stakeId),
+          eq(userSpinBalances.tier, tier)
+        ));
+      
+      if (existing) {
+        // Update existing balance
+        await db.update(userSpinBalances)
+          .set({ 
+            balance: existing.balance + spinAmount
+          })
+          .where(eq(userSpinBalances.id, existing.id));
+      } else {
+        // Create new balance record
+        await db.insert(userSpinBalances).values({
+          stakeId,
+          tier,
+          balance: spinAmount,
+        });
+      }
+      
+      // Log the action
+      await logAdminActivity({
+        action: "grant_spins",
+        targetType: "user",
+        targetId: user.id,
+        details: { 
+          stakeUsername: stakeId,
+          tier,
+          amount: spinAmount,
+        },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
+      console.log(`[Admin] Granted ${spinAmount} ${tier} spins to ${stakeId}`);
+      
+      // Get updated balances
+      const newBalances = await getSpinBalances(stakeId);
+      
+      return res.json({ 
+        success: true, 
+        message: `Granted ${spinAmount} ${tier} spin${spinAmount > 1 ? 's' : ''} to ${stakeId}`,
+        spinBalances: newBalances
+      });
+    } catch (err) {
+      console.error("Admin grant spins error:", err);
+      return res.status(500).json({ message: "Failed to grant spins" });
+    }
+  });
+
   // Admin: Update user verification status
   app.post("/api/admin/update-verification", async (req: Request, res: Response) => {
     if (!await requireAdmin(req, res)) return;
