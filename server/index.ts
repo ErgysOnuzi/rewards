@@ -69,7 +69,7 @@ app.use(
       // sameSite: "none" is required for cross-site iframe usage but requires secure: true
       secure: isSecure,
       httpOnly: true,
-      maxAge: SESSION_TIMEOUT, // 20 minutes of inactivity
+      maxAge: SESSION_TIMEOUT, // 30 days, refreshed on each request
       // "none" allows cross-site cookies (for iframe embedding)
       // "lax" is safer but doesn't work in iframes
       sameSite: isSecure ? "none" : "lax",

@@ -1,7 +1,7 @@
 import jwt from "jsonwebtoken";
 
 const JWT_SECRET = process.env.SESSION_SECRET!;
-const JWT_EXPIRY = "20m";
+const JWT_EXPIRY = "30d"; // 30 days to match session duration
 
 export interface JwtPayload {
   userId: string;

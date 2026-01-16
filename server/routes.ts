@@ -2409,6 +2409,7 @@ export async function registerRoutes(
     // Determine values - override takes precedence, then sheet data
     let lifetimeWagered: number | null = null;
     let yearToDateWagered: number | null = null;
+    let weeklyWagered: number | null = null;
     let platform: string | null = null;
     let usingOverride = false;
     
@@ -2418,9 +2419,10 @@ export async function registerRoutes(
       yearToDateWagered = override.yearToDateWagered;
       platform = "Override (Test Data)";
     } else {
-      // NGR sheet = lifetime wagered
+      // NGR sheet = lifetime wagered + weekly wagered
       if (ngrData) {
         lifetimeWagered = ngrData.wageredAmount;
+        weeklyWagered = ngrData.wageredWeekly ?? null;
       }
       // Weighted sheets = 2026 YTD wagered
       if (weightedData.wager > 0) {
@@ -2459,6 +2461,7 @@ export async function registerRoutes(
       stakeId,
       lifetimeWagered,
       yearToDateWagered,
+      weeklyWagered,
       platform,
       usingOverride,
       sheetLastUpdated: cacheStatus.lastFetchTime,

@@ -93,6 +93,7 @@ interface UserLookup {
   stakeId: string;
   lifetimeWagered: number | null;
   yearToDateWagered: number | null;
+  weeklyWagered: number | null;
   platform: string | null;
   usingOverride: boolean;
   sheetLastUpdated: string | null;
@@ -1128,6 +1129,7 @@ export default function Admin() {
                             <div><span className="text-muted-foreground">Stake ID:</span> {lookupResult.stakeId}</div>
                             <div><span className="text-muted-foreground">Lifetime Wagered:</span> {lookupResult.lifetimeWagered !== null ? formatAmount(lookupResult.lifetimeWagered) : "N/A"}</div>
                             <div><span className="text-muted-foreground">2026 YTD Wagered:</span> {lookupResult.yearToDateWagered !== null ? formatAmount(lookupResult.yearToDateWagered) : "N/A"}</div>
+                            <div><span className="text-muted-foreground">Weekly Wagered:</span> {lookupResult.weeklyWagered !== null && lookupResult.weeklyWagered !== undefined ? formatAmount(lookupResult.weeklyWagered) : "N/A"}</div>
                             <div><span className="text-muted-foreground">Platform:</span> {lookupResult.platform ?? "N/A"}</div>
                             <div><span className="text-muted-foreground">Tickets (from 2026):</span> {lookupResult.computedTickets}</div>
                             <div><span className="text-muted-foreground">Last Updated:</span> {lookupResult.sheetLastUpdated ? formatDate(lookupResult.sheetLastUpdated) : "N/A"}</div>
