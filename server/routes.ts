@@ -3714,6 +3714,48 @@ export async function registerRoutes(
     }
   });
 
+  // =================== PASSWORD RESET REQUESTS ===================
+  app.get("/api/admin/password-reset-requests", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
+      
+      // Get password reset requests with user info
+      const requests = await db.select({
+        id: passwordResetTokens.id,
+        userId: passwordResetTokens.userId,
+        createdAt: passwordResetTokens.createdAt,
+        expiresAt: passwordResetTokens.expiresAt,
+        usedAt: passwordResetTokens.usedAt,
+        ipHash: passwordResetTokens.requestIpHash,
+        username: users.username,
+        email: users.email,
+      })
+      .from(passwordResetTokens)
+      .leftJoin(users, eq(passwordResetTokens.userId, users.id))
+      .orderBy(desc(passwordResetTokens.createdAt))
+      .limit(limit);
+      
+      return res.json({ 
+        requests: requests.map(r => ({
+          id: r.id,
+          userId: r.userId,
+          username: r.username || "Unknown",
+          email: r.email || "No email",
+          createdAt: r.createdAt?.toISOString(),
+          expiresAt: r.expiresAt?.toISOString(),
+          usedAt: r.usedAt?.toISOString() || null,
+          status: r.usedAt ? "used" : (r.expiresAt && new Date(r.expiresAt) < new Date() ? "expired" : "pending"),
+          ipHash: r.ipHash,
+        }))
+      });
+    } catch (err) {
+      console.error("Admin password reset requests error:", err);
+      return res.status(500).json({ message: "Failed to fetch password reset requests" });
+    }
+  });
+
   // =================== ADMIN ACTIVITY LOGS ===================
   app.get("/api/admin/activity-logs", async (req: Request, res: Response) => {
     if (!await requireAdmin(req, res)) return;

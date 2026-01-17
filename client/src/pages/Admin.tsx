@@ -120,6 +120,18 @@ interface FeatureToggles {
   [key: string]: { value: string; description: string };
 }
 
+interface PasswordResetRequest {
+  id: number;
+  userId: string;
+  username: string;
+  email: string;
+  createdAt: string;
+  expiresAt: string;
+  usedAt: string | null;
+  status: "pending" | "used" | "expired";
+  ipHash: string | null;
+}
+
 interface Payout {
   id: number;
   stakeId: string;
@@ -338,6 +350,11 @@ export default function Admin() {
 
   const { data: togglesData, refetch: refetchToggles } = useQuery<{ toggles: FeatureToggles }>({
     queryKey: ["/api/admin/toggles"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: passwordResetData, refetch: refetchPasswordResets } = useQuery<{ requests: PasswordResetRequest[] }>({
+    queryKey: ["/api/admin/password-reset-requests"],
     enabled: isAuthenticated === true,
   });
 
@@ -882,6 +899,9 @@ export default function Admin() {
               </TabsTrigger>
               <TabsTrigger value="activity" data-testid="tab-activity" className="text-xs sm:text-sm">
                 <Activity className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Activity</span>
+              </TabsTrigger>
+              <TabsTrigger value="password-resets" data-testid="tab-password-resets" className="text-xs sm:text-sm">
+                <Key className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Resets</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2574,6 +2594,85 @@ export default function Admin() {
                       </tbody>
                     </table>
                   </div>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Password Reset Requests Tab */}
+          <TabsContent value="password-resets" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Key className="w-5 h-5" />
+                    Password Reset Requests
+                  </CardTitle>
+                  <CardDescription>
+                    View all password reset requests from users
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => refetchPasswordResets()} 
+                  variant="outline" 
+                  size="sm"
+                  data-testid="button-refresh-resets"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-3">Time</th>
+                        <th className="text-left py-2 px-3">Username</th>
+                        <th className="text-left py-2 px-3">Email</th>
+                        <th className="text-left py-2 px-3">Status</th>
+                        <th className="text-left py-2 px-3">Expires</th>
+                        <th className="text-left py-2 px-3">IP Hash</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {passwordResetData?.requests?.map((req) => (
+                        <tr key={req.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3 text-muted-foreground whitespace-nowrap">
+                            {formatDate(req.createdAt)}
+                          </td>
+                          <td className="py-2 px-3 font-medium">
+                            {req.username}
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground">
+                            {req.email}
+                          </td>
+                          <td className="py-2 px-3">
+                            <Badge variant={
+                              req.status === 'used' ? 'default' :
+                              req.status === 'expired' ? 'secondary' :
+                              'outline'
+                            }>
+                              {req.status}
+                            </Badge>
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground whitespace-nowrap">
+                            {formatDate(req.expiresAt)}
+                          </td>
+                          <td className="py-2 px-3 font-mono text-xs text-muted-foreground">
+                            {req.ipHash?.substring(0, 12) || 'N/A'}...
+                          </td>
+                        </tr>
+                      ))}
+                      {(!passwordResetData?.requests || passwordResetData.requests.length === 0) && (
+                        <tr>
+                          <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                            No password reset requests found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
                 </div>
               </CardContent>
             </Card>
