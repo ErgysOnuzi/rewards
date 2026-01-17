@@ -287,6 +287,19 @@ export async function bootstrapDatabase(): Promise<void> {
       )
     `);
     
+    // Create password_reset_tokens table
+    await client.query(`
+      CREATE TABLE IF NOT EXISTS password_reset_tokens (
+        id SERIAL PRIMARY KEY,
+        user_id TEXT NOT NULL,
+        token_hash TEXT NOT NULL,
+        expires_at TIMESTAMP NOT NULL,
+        used_at TIMESTAMP,
+        request_ip_hash TEXT,
+        created_at TIMESTAMP DEFAULT NOW() NOT NULL
+      )
+    `);
+    
     console.log("[DB Bootstrap] All tables verified/created successfully");
   } catch (error) {
     console.error("[DB Bootstrap] Failed to create tables:", error);
