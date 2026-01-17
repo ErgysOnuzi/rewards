@@ -593,6 +593,8 @@ export async function registerRoutes(
     try {
       const { token, newPassword } = req.body;
       
+      console.log("[Password Reset] Received token:", token ? `${token.substring(0, 10)}... (length: ${token.length})` : "MISSING");
+      
       if (!token || !newPassword) {
         return res.status(400).json({ message: "Token and new password are required" });
       }
@@ -603,6 +605,7 @@ export async function registerRoutes(
       
       // Hash the provided token to compare with stored hash
       const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+      console.log("[Password Reset] Computed hash prefix:", tokenHash.substring(0, 20));
       
       // Find valid token
       const [resetRecord] = await db.select().from(passwordResetTokens)
@@ -611,7 +614,16 @@ export async function registerRoutes(
           gte(passwordResetTokens.expiresAt, new Date())
         ));
       
+      // Debug: check all tokens in DB
+      const allTokens = await db.select().from(passwordResetTokens);
+      console.log("[Password Reset] All tokens in DB:", allTokens.map(t => ({
+        hashPrefix: t.tokenHash.substring(0, 20),
+        expiresAt: t.expiresAt,
+        isExpired: new Date() > new Date(t.expiresAt)
+      })));
+      
       if (!resetRecord) {
+        console.log("[Password Reset] No matching token found");
         return res.status(400).json({ message: "Invalid or expired reset link" });
       }
       
