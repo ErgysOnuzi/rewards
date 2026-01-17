@@ -37,15 +37,26 @@ async function ensureTablesExist(): Promise<void> {
 
 async function fixSchemaColumns(): Promise<void> {
   try {
-    const columnsToRemove = ['profile_image_url', 'referral_code', 'referred_by'];
+    // Use individual safe SQL statements for each column
+    try {
+      await db.execute(sql`ALTER TABLE users DROP COLUMN IF EXISTS profile_image_url`);
+      console.log(`[Maintenance] Dropped column profile_image_url (if existed)`);
+    } catch (err) {
+      console.log(`[Maintenance] Column profile_image_url already removed or doesn't exist`);
+    }
     
-    for (const column of columnsToRemove) {
-      try {
-        await db.execute(sql.raw(`ALTER TABLE users DROP COLUMN IF EXISTS ${column}`));
-        console.log(`[Maintenance] Dropped column ${column} (if existed)`);
-      } catch (err) {
-        console.log(`[Maintenance] Column ${column} already removed or doesn't exist`);
-      }
+    try {
+      await db.execute(sql`ALTER TABLE users DROP COLUMN IF EXISTS referral_code`);
+      console.log(`[Maintenance] Dropped column referral_code (if existed)`);
+    } catch (err) {
+      console.log(`[Maintenance] Column referral_code already removed or doesn't exist`);
+    }
+    
+    try {
+      await db.execute(sql`ALTER TABLE users DROP COLUMN IF EXISTS referred_by`);
+      console.log(`[Maintenance] Dropped column referred_by (if existed)`);
+    } catch (err) {
+      console.log(`[Maintenance] Column referred_by already removed or doesn't exist`);
     }
   } catch (err) {
     console.error("[Maintenance] Schema fix error:", err);
