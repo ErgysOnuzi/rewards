@@ -96,6 +96,36 @@ export default function TicketStatus({ data, onWithdraw }: TicketStatusProps) {
             </p>
           </div>
 
+          {/* Bonus Spins Section */}
+          {(data.spinBalances.bronze > 0 || data.spinBalances.silver > 0 || data.spinBalances.gold > 0) && (
+            <div className="p-4 rounded-xl bg-primary/10 ring-1 ring-primary/30">
+              <div className="flex items-center gap-2 mb-3">
+                <Ticket className="w-5 h-5 text-primary" />
+                <span className="text-sm font-semibold text-primary">Bonus Spins</span>
+              </div>
+              <div className="grid grid-cols-3 gap-3">
+                {data.spinBalances.bronze > 0 && (
+                  <div className="text-center p-2 rounded-lg bg-amber-700/20">
+                    <p className="text-xs text-amber-600 mb-1">Bronze</p>
+                    <p className="text-xl font-bold text-amber-500" data-testid="text-bronze-spins">{data.spinBalances.bronze}</p>
+                  </div>
+                )}
+                {data.spinBalances.silver > 0 && (
+                  <div className="text-center p-2 rounded-lg bg-slate-400/20">
+                    <p className="text-xs text-slate-400 mb-1">Silver</p>
+                    <p className="text-xl font-bold text-slate-300" data-testid="text-silver-spins">{data.spinBalances.silver}</p>
+                  </div>
+                )}
+                {data.spinBalances.gold > 0 && (
+                  <div className="text-center p-2 rounded-lg bg-yellow-500/20">
+                    <p className="text-xs text-yellow-500 mb-1">Gold</p>
+                    <p className="text-xl font-bold text-yellow-400" data-testid="text-gold-spins">{data.spinBalances.gold}</p>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="flex items-center justify-center gap-2 pt-2 border-t border-muted">
             <Ticket className="w-4 h-4 text-primary/60" />
             <span className="text-xs text-muted-foreground font-medium">
