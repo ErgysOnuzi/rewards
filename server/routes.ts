@@ -38,7 +38,7 @@ import {
 } from "./lib/security";
 import { logAdminActivity, getAdminActivityLogs, getAdminActivityLogCount, type AdminAction, type TargetType } from "./lib/adminActivityLog";
 import { createBackup, getBackupStatus, listBackupFiles } from "./lib/backup";
-import { sendPasswordResetEmail, sendVerificationApprovedEmail } from "./lib/email";
+import { sendPasswordResetEmail, sendVerificationApprovedEmail, sendPasswordChangedEmail } from "./lib/email";
 
 
 // Count regular spins for a user from database (excludes bonus spins)
@@ -655,6 +655,16 @@ export async function registerRoutes(
       });
       
       console.log("[Password Reset] Password reset completed for user:", user.username);
+      
+      // Send password changed confirmation email
+      if (user.email) {
+        try {
+          const decryptedEmail = decrypt(user.email);
+          await sendPasswordChangedEmail(decryptedEmail, user.username);
+        } catch (emailErr) {
+          console.error("[Password Reset] Failed to send confirmation email:", emailErr);
+        }
+      }
       
       return res.json({ success: true, message: "Password has been reset successfully. You can now log in." });
     } catch (err) {
