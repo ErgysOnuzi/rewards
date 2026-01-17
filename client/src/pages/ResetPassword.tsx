@@ -124,11 +124,11 @@ export default function ResetPassword() {
             </CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Link href="/login">
+            <a href="https://lukerewards.com/rewards">
               <Button className="w-full" data-testid="button-go-to-login">
                 Go to Login
               </Button>
-            </Link>
+            </a>
           </CardContent>
         </Card>
       </div>
