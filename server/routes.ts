@@ -526,26 +526,29 @@ export async function registerRoutes(
   // User requests a password reset email
   app.post("/api/auth/forgot-password", async (req: Request, res: Response) => {
     try {
-      const { username, email } = req.body;
+      const { email } = req.body;
       
-      if (!username || !email) {
-        return res.status(400).json({ message: "Username and email are required" });
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
       }
       
-      // Find user by username (case-insensitive)
-      const [user] = await db.select().from(users)
-        .where(sql`lower(${users.username}) = ${username.toLowerCase().trim()}`);
+      // Find user by email - need to check all users since email is encrypted
+      const allUsers = await db.select().from(users).where(isNull(users.deletedAt));
+      
+      let user = null;
+      let userEmail = "";
+      for (const u of allUsers) {
+        const storedEmail = u.email ? decrypt(u.email) : "";
+        if (storedEmail.toLowerCase() === email.toLowerCase().trim()) {
+          user = u;
+          userEmail = storedEmail;
+          break;
+        }
+      }
       
       if (!user) {
         // Don't reveal whether user exists
-        return res.json({ success: true, message: "If an account with that username and email exists, a reset link has been sent." });
-      }
-      
-      // Check if email matches (decrypt stored email)
-      const storedEmail = user.email ? decrypt(user.email) : "";
-      if (storedEmail.toLowerCase() !== email.toLowerCase().trim()) {
-        // Don't reveal whether email matched
-        return res.json({ success: true, message: "If an account with that username and email exists, a reset link has been sent." });
+        return res.json({ success: true, message: "If an account with that email exists, a reset link has been sent." });
       }
       
       // Generate reset token
@@ -570,7 +573,7 @@ export async function registerRoutes(
         return res.status(500).json({ message: "Server configuration error. Please contact support." });
       }
       const resetLink = `${baseUrl}/reset-password?token=${encodeURIComponent(resetToken)}`;
-      const emailResult = await sendPasswordResetEmail(storedEmail, user.username, resetLink);
+      const emailResult = await sendPasswordResetEmail(userEmail, user.username, resetLink);
       if (!emailResult.success) {
         console.error("[Password Reset] Failed to send email:", emailResult.error);
         return res.status(500).json({ message: "Failed to send reset email. Please try again later." });
@@ -578,7 +581,7 @@ export async function registerRoutes(
       
       console.log("[Password Reset] Reset email sent for user:", user.username);
       
-      return res.json({ success: true, message: "If an account with that username and email exists, a reset link has been sent." });
+      return res.json({ success: true, message: "If an account with that email exists, a reset link has been sent." });
     } catch (err) {
       console.error("Forgot password error:", err);
       return res.status(500).json({ message: "An error occurred. Please try again later." });

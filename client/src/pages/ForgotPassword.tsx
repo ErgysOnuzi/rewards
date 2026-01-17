@@ -10,7 +10,6 @@ import { apiRequest } from "@/lib/queryClient";
 
 export default function ForgotPassword() {
   const { toast } = useToast();
-  const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmitted, setIsSubmitted] = useState(false);
@@ -18,11 +17,11 @@ export default function ForgotPassword() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!username || !email) {
+    if (!email) {
       toast({
         variant: "destructive",
         title: "Error",
-        description: "Please enter both username and email",
+        description: "Please enter your email",
       });
       return;
     }
@@ -30,7 +29,6 @@ export default function ForgotPassword() {
     setIsSubmitting(true);
     try {
       const response = await apiRequest("POST", "/api/auth/forgot-password", {
-        username,
         email,
       });
       
@@ -95,23 +93,11 @@ export default function ForgotPassword() {
         <CardHeader className="text-center">
           <CardTitle className="text-2xl">Forgot Password</CardTitle>
           <CardDescription>
-            Enter your username and email to receive a password reset link
+            Enter your email to receive a password reset link
           </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div className="space-y-2">
-              <Label htmlFor="username">Username</Label>
-              <Input
-                id="username"
-                type="text"
-                placeholder="Enter your username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={isSubmitting}
-                data-testid="input-username"
-              />
-            </div>
             <div className="space-y-2">
               <Label htmlFor="email">Email</Label>
               <Input

@@ -32,7 +32,7 @@ Instead of automatic bet ID lookup, users upload screenshots showing their Stake
 
 ### Password Reset
 - Users can reset their password via `/forgot-password` page
-- Requires username + email match to send reset link
+- Requires only email to send reset link
 - Reset tokens expire in 1 hour (stored as SHA-256 hash in database)
 - Token-based reset via `/reset-password?token=...` page
 
