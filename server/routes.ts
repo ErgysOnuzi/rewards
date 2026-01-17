@@ -1329,10 +1329,20 @@ export async function registerRoutes(
       const ticketsUsedBefore = await countSpinsForStakeId(stakeId);
       const ticketsRemaining = ticketsTotal - ticketsUsedBefore;
 
-      // Check if user has tickets
-      if (ticketsRemaining <= 0) {
+      // Check granted spin balances (bronze tier = free spins)
+      const spinBalances = await getSpinBalances(stakeId);
+      const grantedBronzeSpins = spinBalances.bronze;
+
+      // Check if user has tickets OR granted spins
+      const hasTickets = ticketsRemaining > 0;
+      const hasGrantedSpins = grantedBronzeSpins > 0;
+      
+      if (!hasTickets && !hasGrantedSpins) {
         return res.status(403).json({ message: "No tickets remaining." } as ErrorResponse);
       }
+      
+      // Determine spin source: prefer free tickets, then granted spins
+      const usingGrantedSpin = !hasTickets && hasGrantedSpins;
 
       // Check for active bonus event
       const bonusEvent = await getBonusEventStatus();
@@ -1368,11 +1378,39 @@ export async function registerRoutes(
       // Use weighted random selection for case prize
       const prize = selectCasePrize(prizesToUse);
       const isWin = prize.value > 0;
-      const spinNumber = ticketsUsedBefore + 1;
-      const ticketsUsedAfter = spinNumber;
-      const ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
+      
+      // Calculate spin tracking based on source
+      let spinNumber: number;
+      let ticketsUsedAfter: number;
+      let ticketsRemainingAfter: number;
+      
+      if (usingGrantedSpin) {
+        // Deduct from granted spin balance
+        const [bronzeBalance] = await db.select().from(userSpinBalances)
+          .where(and(
+            eq(userSpinBalances.stakeId, stakeId),
+            eq(userSpinBalances.tier, "bronze")
+          ));
+        
+        if (bronzeBalance && bronzeBalance.balance > 0) {
+          await db.update(userSpinBalances)
+            .set({ balance: bronzeBalance.balance - 1 })
+            .where(eq(userSpinBalances.id, bronzeBalance.id));
+        }
+        
+        // For granted spins, don't affect the free ticket counts
+        spinNumber = ticketsUsedBefore; // Don't increment
+        ticketsUsedAfter = ticketsUsedBefore;
+        ticketsRemainingAfter = ticketsRemaining;
+      } else {
+        // Normal free ticket spin
+        spinNumber = ticketsUsedBefore + 1;
+        ticketsUsedAfter = spinNumber;
+        ticketsRemainingAfter = ticketsTotal - ticketsUsedAfter;
+      }
 
       // Log spin to database (use lowercase stakeId for consistent counting)
+      // Mark granted spins with isBonus: true so they don't count against free tickets
       await db.insert(spinLogs).values({
         stakeId: stakeId,
         wageredAmount: lifetimeWagered,
@@ -1381,7 +1419,7 @@ export async function registerRoutes(
         prizeLabel: prize.label,
         prizeValue: prize.value,
         prizeColor: prize.color,
-        isBonus: false,
+        isBonus: usingGrantedSpin, // true for granted spins, false for free tickets
         ipHash,
       });
 
