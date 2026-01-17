@@ -583,8 +583,14 @@ export async function registerRoutes(
       
       return res.json({ success: true, message: "If an account with that email exists, a reset link has been sent." });
     } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : "Unknown error";
+      const errorName = err instanceof Error ? err.name : "UnknownError";
       console.error("Forgot password error:", err);
-      return res.status(500).json({ message: "An error occurred. Please try again later." });
+      return res.status(500).json({ 
+        message: "An error occurred. Please try again later.",
+        error: errorMessage,
+        errorType: errorName,
+      });
     }
   });
 
