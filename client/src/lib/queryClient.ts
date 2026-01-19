@@ -14,20 +14,46 @@ export function isInIframe(): boolean {
   }
 }
 
-// Try to use localStorage, fall back to memory
+// Try to use localStorage AND sessionStorage for redundancy
 function tryLocalStorage(action: 'get' | 'set' | 'remove', value?: string | null): string | null {
   try {
     if (action === 'get') {
-      return localStorage.getItem(AUTH_TOKEN_KEY);
+      // Try localStorage first, then sessionStorage as backup
+      const localValue = localStorage.getItem(AUTH_TOKEN_KEY);
+      if (localValue) return localValue;
+      
+      // Check sessionStorage and restore to localStorage if found
+      const sessionValue = sessionStorage.getItem(AUTH_TOKEN_KEY);
+      if (sessionValue) {
+        try {
+          localStorage.setItem(AUTH_TOKEN_KEY, sessionValue);
+          console.log('[Auth] Restored token from sessionStorage to localStorage');
+        } catch { /* ignore */ }
+        return sessionValue;
+      }
+      return null;
     } else if (action === 'set' && value) {
       localStorage.setItem(AUTH_TOKEN_KEY, value);
+      sessionStorage.setItem(AUTH_TOKEN_KEY, value); // Backup
     } else if (action === 'remove') {
       localStorage.removeItem(AUTH_TOKEN_KEY);
+      sessionStorage.removeItem(AUTH_TOKEN_KEY);
     }
     return null;
   } catch {
     // localStorage blocked (third-party iframe context)
-    console.log('[Auth] localStorage blocked, using in-memory storage');
+    console.log('[Auth] localStorage blocked, trying sessionStorage');
+    try {
+      if (action === 'get') {
+        return sessionStorage.getItem(AUTH_TOKEN_KEY);
+      } else if (action === 'set' && value) {
+        sessionStorage.setItem(AUTH_TOKEN_KEY, value);
+      } else if (action === 'remove') {
+        sessionStorage.removeItem(AUTH_TOKEN_KEY);
+      }
+    } catch {
+      console.log('[Auth] All storage blocked, using in-memory only');
+    }
     return null;
   }
 }
@@ -35,7 +61,30 @@ function tryLocalStorage(action: 'get' | 'set' | 'remove', value?: string | null
 export function getAuthToken(): string | null {
   // Try localStorage first, fall back to memory
   const stored = tryLocalStorage('get');
-  return stored || inMemoryToken;
+  const token = stored || inMemoryToken;
+  
+  // Debug: Log token retrieval status (helps diagnose session issues)
+  if (typeof window !== 'undefined' && !token) {
+    console.log('[Auth] No token found:', { 
+      fromLocalStorage: !!stored, 
+      fromMemory: !!inMemoryToken,
+      localStorageAvailable: isLocalStorageAvailable()
+    });
+  }
+  
+  return token;
+}
+
+// Check if localStorage is actually available and working
+function isLocalStorageAvailable(): boolean {
+  try {
+    const testKey = '__auth_test__';
+    localStorage.setItem(testKey, 'test');
+    localStorage.removeItem(testKey);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export function setAuthToken(token: string | null): void {
@@ -44,10 +93,18 @@ export function setAuthToken(token: string | null): void {
   
   if (token) {
     tryLocalStorage('set', token);
+    // Verify it was stored
+    const verified = tryLocalStorage('get');
+    console.log('[Auth] Token saved:', { 
+      inMemory: true, 
+      inLocalStorage: verified === token,
+      tokenPreview: token.substring(0, 20) + '...'
+    });
     // Notify parent window if in iframe
     notifyParentAuth(token);
   } else {
     tryLocalStorage('remove');
+    console.log('[Auth] Token cleared');
     notifyParentAuth(null);
   }
 }
@@ -74,6 +131,17 @@ function notifyParentAuth(token: string | null): void {
   } catch (e) {
     console.log('[Auth] Could not notify parent:', e);
   }
+}
+
+// Log auth state on module load (helps diagnose session persistence issues)
+if (typeof window !== 'undefined') {
+  const storedToken = tryLocalStorage('get');
+  console.log('[Auth] App startup state:', {
+    hasStoredToken: !!storedToken,
+    tokenPreview: storedToken ? storedToken.substring(0, 20) + '...' : null,
+    isIframe: isInIframe(),
+    localStorageAvailable: isLocalStorageAvailable()
+  });
 }
 
 // Listen for auth tokens from parent window

@@ -688,10 +688,13 @@ export async function registerRoutes(
       const sessionDebug = {
         hasSession: !!req.session,
         sessionId: req.session?.id?.substring(0, 8) + "...",
+        sessionUserId: (req.session as any)?.userId ? "present" : "missing",
         hasCookie: !!req.cookies?.["connect.sid"],
         allCookies: Object.keys(req.cookies || {}),
         hasAuthHeader: !!req.headers.authorization,
+        authHeaderPreview: req.headers.authorization?.substring(0, 30) || null,
         cookieHeader: !!req.headers.cookie,
+        userAgent: req.headers["user-agent"]?.substring(0, 50),
       };
       console.log("[Session Check] No userId found:", sessionDebug);
       return res.json({ user: null });

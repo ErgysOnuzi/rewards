@@ -14,9 +14,12 @@ interface SessionResponse {
 }
 
 async function fetchSession(): Promise<User | null> {
+  const token = getAuthToken();
   const headers: HeadersInit = {
-    ...(getAuthToken() ? { Authorization: `Bearer ${getAuthToken()}` } : {}),
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
   };
+  
+  console.log('[Auth] Fetching session:', { hasToken: !!token });
 
   const response = await fetch("/api/auth/session", {
     credentials: "include",
@@ -24,10 +27,17 @@ async function fetchSession(): Promise<User | null> {
   });
 
   if (!response.ok) {
+    console.log('[Auth] Session fetch failed:', response.status);
     return null;
   }
 
   const data: SessionResponse = await response.json();
+  
+  console.log('[Auth] Session response:', { 
+    hasUser: !!data.user, 
+    hasNewToken: !!data.token,
+    username: data.user?.username 
+  });
   
   if (data.token) {
     setAuthToken(data.token);
