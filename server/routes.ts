@@ -1131,20 +1131,22 @@ export async function registerRoutes(
       }
       
       const ticketsTotal = calculateTickets(weightedWager);
-      const ticketsUsed = await countSpinsForStakeId(stakeId);
+      
+      // Parallelize all database queries for faster response
+      const [ticketsUsed, walletBalance, spinBalances, pendingWithdrawals, bonusStatus] = await Promise.all([
+        countSpinsForStakeId(stakeId),
+        getWalletBalance(stakeId),
+        getSpinBalances(stakeId),
+        getPendingWithdrawals(stakeId),
+        canUseDailyBonus(stakeId),
+      ]);
+      
       const ticketsRemaining = Math.max(0, ticketsTotal - ticketsUsed);
       
-      // Check and award referral bonus if user qualifies (runs in background)
+      // Check and award referral bonus if user qualifies (runs in background - don't await)
       checkAndAwardReferralBonus(userId, weeklyWager).catch(err => {
         console.error("[Referral] Error checking referral bonus:", err);
       });
-      
-      const walletBalance = await getWalletBalance(stakeId);
-      const spinBalances = await getSpinBalances(stakeId);
-      const pendingWithdrawals = await getPendingWithdrawals(stakeId);
-      
-      // Check daily bonus availability
-      const bonusStatus = await canUseDailyBonus(stakeId);
       const bonusWagerMet = weeklyWager >= MIN_WEEKLY_WAGER;
 
       const response: LookupResponse = {
