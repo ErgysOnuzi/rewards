@@ -23,7 +23,8 @@ export type AdminAction =
   | "download_backup"
   | "update_user_profile"
   | "setup_referrals"
-  | "grant_spins";
+  | "grant_spins"
+  | "restore_user";
 
 export type TargetType = "user" | "withdrawal" | "toggle" | "export" | "cache" | "backup" | "session" | "referral";
 

@@ -26,7 +26,7 @@ import { encrypt, decrypt } from "./lib/encryption";
 import { generateToken } from "./lib/jwt";
 import { ZodError, z } from "zod";
 import { db } from "./db";
-import { eq, desc, sql, and, gte, lt, isNull } from "drizzle-orm";
+import { eq, desc, sql, and, gte, lt, isNull, isNotNull } from "drizzle-orm";
 import crypto from "crypto";
 import { 
   logSecurityEvent, 
@@ -3716,6 +3716,93 @@ export async function registerRoutes(
       console.error("Admin delete user error:", err);
       console.error("Delete user params:", { userId: req.params.userId });
       return res.status(500).json({ message: "Failed to delete user", error: err instanceof Error ? err.message : "Unknown error" });
+    }
+  });
+
+  // Admin: Get deleted users
+  app.get("/api/admin/deleted-users", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const deletedUsers = await db.select({
+        id: users.id,
+        username: users.username,
+        email: users.email,
+        stakeUsername: users.stakeUsername,
+        stakePlatform: users.stakePlatform,
+        deletedAt: users.deletedAt,
+        createdAt: users.createdAt,
+      }).from(users)
+        .where(isNotNull(users.deletedAt))
+        .orderBy(desc(users.deletedAt));
+      
+      return res.json({
+        users: deletedUsers.map(u => ({
+          id: u.id,
+          username: u.username,
+          email: u.email,
+          stakeUsername: u.stakeUsername,
+          stakePlatform: u.stakePlatform,
+          deletedAt: u.deletedAt?.toISOString(),
+          createdAt: u.createdAt?.toISOString(),
+        }))
+      });
+    } catch (err) {
+      console.error("Admin get deleted users error:", err);
+      return res.status(500).json({ message: "Failed to get deleted users" });
+    }
+  });
+
+  // Admin: Restore deleted user (reset to unverified state)
+  app.post("/api/admin/users/:userId/restore", async (req: Request, res: Response) => {
+    if (!await requireAdmin(req, res)) return;
+    
+    try {
+      const { userId } = req.params;
+      
+      if (!userId) {
+        return res.status(400).json({ message: "User ID is required" });
+      }
+      
+      // Find the deleted user
+      const [user] = await db.select().from(users).where(eq(users.id, userId));
+      if (!user) {
+        return res.status(404).json({ message: "User not found" });
+      }
+      
+      // Check if actually deleted
+      if (!user.deletedAt) {
+        return res.status(400).json({ message: "User is not deleted" });
+      }
+      
+      // Restore user - clear deletedAt and reset to unverified state
+      await db.update(users).set({
+        deletedAt: null,
+        verificationStatus: "unverified",
+        updatedAt: new Date(),
+      }).where(eq(users.id, userId));
+      
+      // Log the action
+      logSecurityEvent({
+        type: "auth_success",
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+        stakeId: user.stakeUsername || user.username,
+        details: `Admin restored deleted user account: ${user.username} (stake: ${user.stakeUsername || 'N/A'})`,
+      });
+      
+      await logAdminActivity({
+        action: "restore_user",
+        targetType: "user",
+        targetId: userId,
+        details: { username: user.username, stakeUsername: user.stakeUsername },
+        ipHash: hashForLogging(getClientIpForSecurity(req)),
+      });
+      
+      console.log(`[Admin] Restored user ${user.username} (stake: ${user.stakeUsername || 'N/A'})`);
+      return res.json({ success: true, username: user.username });
+    } catch (err) {
+      console.error("Admin restore user error:", err);
+      return res.status(500).json({ message: "Failed to restore user" });
     }
   });
 
