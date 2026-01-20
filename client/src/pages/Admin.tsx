@@ -132,6 +132,16 @@ interface PasswordResetRequest {
   ipHash: string | null;
 }
 
+interface DeletedUser {
+  id: string;
+  username: string;
+  email: string | null;
+  stakeUsername: string | null;
+  stakePlatform: string | null;
+  deletedAt: string;
+  createdAt: string;
+}
+
 interface Payout {
   id: number;
   stakeId: string;
@@ -355,6 +365,11 @@ export default function Admin() {
 
   const { data: passwordResetData, refetch: refetchPasswordResets } = useQuery<{ requests: PasswordResetRequest[] }>({
     queryKey: ["/api/admin/password-reset-requests"],
+    enabled: isAuthenticated === true,
+  });
+
+  const { data: deletedUsersData, refetch: refetchDeletedUsers } = useQuery<{ users: DeletedUser[] }>({
+    queryKey: ["/api/admin/deleted-users"],
     enabled: isAuthenticated === true,
   });
 
@@ -691,10 +706,27 @@ export default function Admin() {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users/verification-status"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
       queryClient.invalidateQueries({ queryKey: ["/api/admin/verifications"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deleted-users"] });
       toast({ title: "User deleted", description: `Account @${data.username} has been deleted.` });
     },
     onError: (err: Error) => {
       toast({ title: "Failed to delete user", description: err.message, variant: "destructive" });
+    },
+  });
+
+  const restoreUser = useMutation({
+    mutationFn: async (userId: string) => {
+      const res = await apiRequest("POST", `/api/admin/users/${userId}/restore`);
+      return res.json();
+    },
+    onSuccess: (data: any) => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/deleted-users"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users/verification-status"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/users"] });
+      toast({ title: "User restored", description: `Account @${data.username} has been restored and needs re-verification.` });
+    },
+    onError: (err: Error) => {
+      toast({ title: "Failed to restore user", description: err.message, variant: "destructive" });
     },
   });
 
@@ -902,6 +934,9 @@ export default function Admin() {
               </TabsTrigger>
               <TabsTrigger value="password-resets" data-testid="tab-password-resets" className="text-xs sm:text-sm">
                 <Key className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Resets</span>
+              </TabsTrigger>
+              <TabsTrigger value="deleted-users" data-testid="tab-deleted-users" className="text-xs sm:text-sm">
+                <Trash2 className="w-4 h-4 sm:mr-1" /><span className="hidden sm:inline"> Deleted</span>
               </TabsTrigger>
             </TabsList>
           </div>
@@ -2668,6 +2703,90 @@ export default function Admin() {
                         <tr>
                           <td colSpan={6} className="text-center py-8 text-muted-foreground">
                             No password reset requests found
+                          </td>
+                        </tr>
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          {/* Deleted Users Tab */}
+          <TabsContent value="deleted-users" className="space-y-4">
+            <Card>
+              <CardHeader className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                <div>
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <Trash2 className="w-5 h-5" />
+                    Deleted Users
+                  </CardTitle>
+                  <CardDescription>
+                    View and restore deleted user accounts
+                  </CardDescription>
+                </div>
+                <Button 
+                  onClick={() => refetchDeletedUsers()} 
+                  variant="outline" 
+                  size="sm"
+                  data-testid="button-refresh-deleted"
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Refresh
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <div className="border rounded-lg overflow-hidden">
+                  <table className="w-full text-sm">
+                    <thead className="bg-muted/50">
+                      <tr className="border-b">
+                        <th className="text-left py-2 px-3">Username</th>
+                        <th className="text-left py-2 px-3">Stake ID</th>
+                        <th className="text-left py-2 px-3">Platform</th>
+                        <th className="text-left py-2 px-3">Deleted At</th>
+                        <th className="text-left py-2 px-3">Created At</th>
+                        <th className="text-left py-2 px-3">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {deletedUsersData?.users?.map((user) => (
+                        <tr key={user.id} className="border-b hover:bg-muted/30">
+                          <td className="py-2 px-3 font-medium">
+                            {user.username}
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground">
+                            {user.stakeUsername || 'N/A'}
+                          </td>
+                          <td className="py-2 px-3">
+                            <Badge variant="outline">
+                              {user.stakePlatform || 'N/A'}
+                            </Badge>
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground whitespace-nowrap">
+                            {formatDate(user.deletedAt)}
+                          </td>
+                          <td className="py-2 px-3 text-muted-foreground whitespace-nowrap">
+                            {formatDate(user.createdAt)}
+                          </td>
+                          <td className="py-2 px-3">
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              onClick={() => restoreUser.mutate(user.id)}
+                              disabled={restoreUser.isPending}
+                              data-testid={`button-restore-${user.id}`}
+                            >
+                              <RotateCw className="w-3 h-3 mr-1" />
+                              Restore
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                      {(!deletedUsersData?.users || deletedUsersData.users.length === 0) && (
+                        <tr>
+                          <td colSpan={6} className="text-center py-8 text-muted-foreground">
+                            No deleted users found
                           </td>
                         </tr>
                       )}
